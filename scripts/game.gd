@@ -71,6 +71,7 @@ var gamepad: GamepadInput
 var world_root: Node3D
 var camera: Camera3D
 var environment: Environment
+var xr_rig: XRRig = null # non-null when running in VR through OpenXR
 
 var texture_manager := Parsers.TextureManager.new()
 var objects_parser := Parsers.ObjectsDatParser.new()
@@ -219,6 +220,12 @@ func _setup_scene() -> void:
 	add_child(camera)
 	camera.current = true
 
+	# In VR the camera above stays the player body/head proxy; the rig renders from the tracked head.
+	xr_rig = XRRig.try_create(self)
+	if xr_rig != null:
+		add_child(xr_rig)
+		camera.current = false
+
 	fx = Effects.new()
 	fx.name = "Effects"
 	add_child(fx)
@@ -228,7 +235,10 @@ func _setup_scene() -> void:
 	ui = GameUI.new()
 	ui.name = "UI"
 	ui.game = self
-	add_child(ui)
+	if xr_rig != null:
+		xr_rig.ui_viewport.add_child(ui)
+	else:
+		add_child(ui)
 	gamepad = GamepadInput.new()
 	gamepad.game = self
 	add_child(gamepad)
@@ -248,6 +258,8 @@ func player_position() -> Vector3:
 
 func vibrate(duration_ms: float, weak: float, strong: float) -> void:
 	gamepad.vibrate(duration_ms, weak, strong)
+	if xr_rig != null and gamepad.vibration_enabled:
+		xr_rig.haptic(duration_ms, maxf(weak, strong))
 
 
 # ---------------------------------------------------------------- Storage (localStorage replacement)
@@ -383,7 +395,8 @@ func is_paused() -> bool:
 # Enters gameplay: captures the mouse and hides the menu (startGameSession).
 func start_game_session() -> void:
 	playing = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if xr_rig == null:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	ui.show_menu(false)
 	ui.show_loading(not world_ready)
 	audio.set_paused(false)
@@ -420,7 +433,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		if game_started:
 			save_current_run()
-	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+	# In VR the desktop window usually isn't focused, so focus loss doesn't pause there.
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and xr_rig == null:
 		release_inputs()
 		if playing and world_ready:
 			pause_game_session()
@@ -1137,7 +1151,7 @@ func generate_and_load_new_level(descend: bool = false, override_options: Dictio
 # ---------------------------------------------------------------- Input
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and playing and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not ui.is_menu_visible():
+	if event is InputEventMouseMotion and xr_rig == null and playing and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not ui.is_menu_visible():
 		var rot := camera.rotation
 		rot.y -= event.relative.x * MOUSE_SENSITIVITY
 		rot.x = clampf(rot.x - event.relative.y * MOUSE_SENSITIVITY, -PI / 2.0, PI / 2.0)
@@ -1227,14 +1241,18 @@ func _process(delta: float) -> void:
 	_handle_screenshot(delta)
 	var paused := is_paused()
 	var gp: Dictionary = gamepad.poll(delta, paused)
+	if xr_rig != null:
+		gp = XRRig.merge_input(gp, xr_rig.poll(delta, paused))
 	if paused:
+		if xr_rig != null:
+			xr_rig.sync_body(delta, false)
 		return
 	if gp.get("pause_toggle", false):
 		pause_game_session()
 		return
-	if gp.get("has_look", false):
+	if gp.get("has_look", false) and xr_rig == null:
 		gamepad.apply_look(camera, delta, gp.look_x, gp.look_y)
-	if gp.get("recenter_pitch", false):
+	if gp.get("recenter_pitch", false) and xr_rig == null:
 		camera.rotation.x = 0.0
 		vibrate(40, 0.2, 0.05)
 	if gp.get("jump", false) and not fly_mode:
@@ -1255,7 +1273,11 @@ func _process(delta: float) -> void:
 
 	_time += delta
 	var dt := minf(delta, 0.1)
+	if xr_rig != null:
+		xr_rig.begin_frame(dt, gp)
 	_update_player_movement(dt, gp)
+	if xr_rig != null:
+		xr_rig.sync_body(dt, true)
 
 	var pos := camera.position
 	_pos_display_timer += delta
@@ -1500,28 +1522,36 @@ func update_weapon_mesh() -> void:
 		return
 	var s := def.scale
 	gun_mesh = md2.create_instance(def.texture_alias)
+	gun_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	gun_model = md2
+	if xr_rig != null:
+		# VR: fixed frame-0 pose held by the right controller; the controller provides all motion.
+		xr_rig.attach_weapon(gun_mesh, md2, def.name, s)
+		return
 	gun_mesh.scale = Vector3(s, s, s)
 	gun_mesh.position = Vector3(0, -25, 5)
 	gun_mesh.rotation = Vector3(0, PI / 2.0, 0)
-	gun_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	camera.add_child(gun_mesh)
-	gun_model = md2
 
 
 func trigger_weapon_attack() -> void:
 	if player_dead:
 		return
 	var gun := current_gun_name()
+	# In VR melee weapons only hit by physically swinging them (see XRRig); the trigger casts spells.
+	if xr_rig != null and not spell_counts.has(gun):
+		return
 	if spell_counts.has(gun):
 		if spell_counts[gun] <= 0:
 			audio.play_sound("buttonselect111.wav", 0.5)
 			return
 		spell_counts[gun] -= 1
 		update_player_hud()
-	is_weapon_attacking = true
-	has_weapon_hit = false
-	weapon_anim_timer = 0.0
-	weapon_anim = Monster.ANIMS.ATTACK
+	if xr_rig == null:
+		is_weapon_attacking = true
+		has_weapon_hit = false
+		weapon_anim_timer = 0.0
+		weapon_anim = Monster.ANIMS.ATTACK
 	vibrate(90, 0.35, 0.2)
 	match gun:
 		"MAGIC MISSILE":
@@ -1575,6 +1605,19 @@ func check_player_attack_hit() -> void:
 			closest = m
 	if closest == null:
 		return
+	apply_melee_hit(closest, player_dir)
+
+
+func is_melee_weapon() -> bool:
+	return not spell_counts.has(current_gun_name())
+
+
+func on_xr_swing_started() -> void:
+	audio.play_sound(AudioManager.random_sound(SWISH_SOUNDS), 0.5)
+
+
+# Damages a monster with the current melee weapon; shared by the desktop attack animation and VR swings.
+func apply_melee_hit(closest: Monster, player_dir: Vector3) -> void:
 	var damage: float = WEAPON_DAMAGE.get(current_gun_name(), 25)
 	var box := closest.bbox
 	var has_box := not box.is_empty()
@@ -1590,7 +1633,7 @@ func check_player_attack_hit() -> void:
 
 
 func _update_player_weapon_animation(delta: float, fwd: bool, back: bool, left: bool, right: bool) -> void:
-	if gun_mesh == null or gun_model == null:
+	if gun_mesh == null or gun_model == null or xr_rig != null:
 		return
 	var moving := fwd or back or left or right
 	var target: Dictionary = Monster.ANIMS.STAND
@@ -1670,6 +1713,10 @@ func launch_projectile(type: String) -> void:
 	var look_dir := look_direction()
 	var spawn := camera.position + look_dir * 40.0
 	spawn.y -= 10.0
+	if xr_rig != null:
+		var ray := xr_rig.aim_ray()
+		look_dir = ray[1]
+		spawn = ray[0] + look_dir * 20.0
 	var slot := fx.acquire_dynamic_light(def.lightColor, def.lightIntensity, def.lightDistance)
 	if slot != null:
 		slot.light.position = spawn

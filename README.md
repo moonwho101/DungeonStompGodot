@@ -158,6 +158,28 @@ godot --headless --path . -s res://tests/test_runner.gd
 | **D-Pad Up** | Toggle music on/off |
 | **D-Pad Down** | Toggle normal mapping |
 
+### VR (OpenXR)
+
+When an OpenXR runtime with a connected headset is available (SteamVR, Meta Quest Link, Windows Mixed Reality via SteamVR, etc.), the game starts in VR automatically. Without one it falls back to the desktop mode above. Pass `-- --no-xr` to force desktop mode.
+
+In VR the player weapon (an MD2 model) is drawn in one fixed pose, held in your right hand. It never plays its MD2 animations; your controller moves it. Melee weapons hit by **physically swinging** them into monsters (one hit per monster per swing). Spells fire from where the right controller points.
+
+| VR Input | Action |
+|----------|--------|
+| **Swing right controller** | Melee attack (axes and swords) |
+| **Right Trigger** | Cast the selected spell / click menu buttons |
+| **Left Stick** | Move / Strafe (head-relative) |
+| **Left Stick Click** | Toggle sprint |
+| **Right Stick (left/right)** | Smooth turn |
+| **Right Stick (up/down)** | Fly up/down (in fly mode) |
+| **A** | Jump (or fly up in fly mode) |
+| **B** | Interact / open door / open chest (menu: back) |
+| **Y** / **Right Stick Click** | Next weapon or spell |
+| **X** | Previous weapon or spell |
+| **Left Menu Button** | Pause / resume |
+
+The HUD and menus appear on a panel floating in front of you. Weapon fit (`WEAPON_*`), swing sensitivity (`SWING_*`), turn speed, and panel placement (`UI_*`) are constants at the top of `scripts/xr_rig.gd`. For development without a headset, `-- --xr-simulate` builds the VR rig with fixed head and hand poses in the desktop window.
+
 ---
 
 ## 📁 Project Structure
@@ -184,7 +206,8 @@ DungeonStompGodot/
 │   ├── monster.gd          # Monster AI and combat state machine
 │   ├── parsers.gd          # Classic binary/text file format parsers
 │   ├── tds.gd              # 3D Studio (.3ds) mesh loader
-│   └── ui.gd               # HUD, menus, and on-screen messages
+│   ├── ui.gd               # HUD, menus, and on-screen messages
+│   └── xr_rig.gd           # OpenXR VR rig, controller-held weapon, swing melee, VR UI panel
 ├── tests/
 │   └── test_runner.gd      # Headless automated test suite
 ├── tools/                  # Asset conversion and analysis utilities
