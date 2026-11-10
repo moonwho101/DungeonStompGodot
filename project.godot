@@ -34,3 +34,8 @@ ds_normal_maps={
 "type": "bool",
 "value": true
 }
+
+[xr]
+
+openxr/enabled=true
+shaders/enabled=true
