@@ -237,6 +237,7 @@ func _setup_scene() -> void:
 	ui.game = self
 	if xr_rig != null:
 		xr_rig.ui_viewport.add_child(ui)
+		xr_rig.attach_hud_overlays(ui)
 	else:
 		add_child(ui)
 	gamepad = GamepadInput.new()
@@ -303,6 +304,8 @@ func _init_game() -> void:
 			gamepad.invert_y = saved_opts.controllerInvertY
 		if saved_opts.get("controllerSens") is float or saved_opts.get("controllerSens") is int:
 			gamepad.set_sensitivity(float(saved_opts.controllerSens))
+		if saved_opts.get("showHud") is bool:
+			ui.set_hud_visible(saved_opts.showHud)
 	set_normal_maps_enabled(normal_maps_enabled)
 	ui.sync_options()
 
@@ -504,6 +507,7 @@ func saved_game_options() -> Dictionary:
 		"controllerVibration": gamepad.vibration_enabled,
 		"controllerInvertY": gamepad.invert_y,
 		"controllerSens": gamepad.sensitivity,
+		"showHud": ui.is_hud_visible(),
 	}
 
 
@@ -528,6 +532,13 @@ func toggle_normal_maps_from_input() -> void:
 	save_game_options()
 	fx.create_floating_text("NORMAL MAPS: ON" if normal_maps_enabled else "NORMAL MAPS: OFF", camera.position,
 		"#22c55e" if normal_maps_enabled else "#ef4444")
+	audio.play_sound("buttonselect111.wav", 0.5)
+
+
+func toggle_hud_from_input() -> void:
+	ui.set_hud_visible(not ui.is_hud_visible())
+	ui.sync_options()
+	save_game_options()
 	audio.play_sound("buttonselect111.wav", 0.5)
 
 
@@ -1224,6 +1235,8 @@ func _on_key_down(key: int) -> void:
 			generate_and_load_new_level(false)
 		KEY_P, KEY_M:
 			toggle_music_from_input()
+		KEY_H:
+			toggle_hud_from_input()
 
 
 func _on_key_up(key: int) -> void:

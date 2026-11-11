@@ -133,6 +133,7 @@ godot --headless --path . -s res://tests/test_runner.gd
 | `G` | Generate a new procedural dungeon level |
 | `N` | Toggle normal mapping |
 | `P` / `M` | Toggle music on/off |
+| `H` | Toggle the player HUD (also in Options → Show Player HUD) |
 | `F` / `V` | Toggle fly mode (noclip exploration) |
 | `C` / `Ctrl` | Fly down (while in fly mode) |
 | `I` | Cheat: Toggle God Mode (invincibility) |
@@ -178,7 +179,7 @@ In VR the player weapon (an MD2 model) is drawn in one fixed pose, held in your 
 | **X** | Previous weapon or spell |
 | **Left Menu Button** | Pause / resume |
 
-The HUD and menus appear on a panel floating in front of you. Weapon fit (`WEAPON_*`), swing sensitivity (`SWING_*`), turn speed, and panel placement (`UI_*`) are constants at the top of `scripts/xr_rig.gd`. For development without a headset, `-- --xr-simulate` builds the VR rig with fixed head and hand poses in the desktop window.
+Menus appear on a panel floating in front of you. The HUD is laid out like a VR dungeon crawler: the debug/info panel sits in the upper-left of your view, the minimap in the upper-right, and the stat bar low in front of you. They follow your body (recentring only when you turn well away) and never move when the menu opens. Their angles are `DEBUG_PANEL_ANGLES`, `MINIMAP_ANGLES` and `STAT_BAR_ANGLES` in `scripts/xr_rig.gd`; the stat bar's size is `HUD_SCALE` in `scripts/ui.gd` (the same setting controls the desktop HUD size). Set `SHOW_DEBUG_PANEL` in `scripts/ui.gd` to `false` to remove the debug/info panel. Weapon fit (`WEAPON_*`), swing sensitivity (`SWING_*`), turn speed, and panel placement (`UI_*`, `OVERLAY_*`) are constants at the top of `scripts/xr_rig.gd`. For development without a headset, `-- --xr-simulate` builds the VR rig with fixed head and hand poses in the desktop window.
 
 ---
 

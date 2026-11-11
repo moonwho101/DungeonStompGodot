@@ -30,9 +30,18 @@ const UI_SIZE := Vector2i(1920, 1080)
 const UI_BASE_SIZE := Vector2i(1280, 720) # smaller layout canvas than desktop so text is readable on the panel
 const UI_WIDTH := 1.6 * UNITS_PER_METER
 const UI_DISTANCE := 1.5 * UNITS_PER_METER
-const UI_HUD_DROP := 0.3 * UNITS_PER_METER
-const UI_FOLLOW_ANGLE := 0.6 # radians the head may turn away before the panel recentres
+const UI_FOLLOW_ANGLE := 0.6 # radians the head may turn away before the panels recentre
 const UI_FOLLOW_SPEED := 4.0
+
+# HUD overlays (stat bar, minimap, debug panel) each get their own panel placed at a fixed angle from where the
+# player faces, like a VR dungeon crawler: info in the upper corners of view, stat bar low. Angles in degrees
+# (yaw: + is right; pitch: + is up). The anchor is the quad corner/edge that sits at that angle.
+const OVERLAY_DISTANCE := 1.4 * UNITS_PER_METER
+const OVERLAY_PIXEL := UI_WIDTH / 1280.0 # world size of one overlay pixel (GameUI.HUD_SCALE sets the stat bar's pixels)
+const OVERLAY_SUPERSAMPLE := 2 # render overlays at this multiple of their pixel size for sharp text
+const DEBUG_PANEL_ANGLES := Vector2(-38.0, 26.0) # top-left corner of the debug panel
+const MINIMAP_ANGLES := Vector2(38.0, 26.0) # top-right corner of the minimap
+const STAT_BAR_ANGLES := Vector2(0.0, -30.0) # top edge (centre) of the stat bar
 
 var game # Game (untyped to avoid a class cycle)
 var simulated := false # --xr-simulate: build the rig without a runtime, using fixed head/hand poses
@@ -44,6 +53,7 @@ var right_aim: XRController3D
 var weapon_anchor: Node3D
 var ui_viewport: SubViewport
 var ui_panel: MeshInstance3D
+var overlays: Array = [] # {control, viewport, quad, angles, anchor}
 var laser: MeshInstance3D
 
 var weapon_tip_local := Vector3.ZERO
@@ -58,6 +68,8 @@ var _sprint_toggle := false
 var _panel_yaw := INF
 var _panel_following := true
 var _panel_was_menu := false
+var _hud_yaw := INF
+var _hud_following := true
 var _prev_tip_origin := Vector3.ZERO
 var _prev_pommel_origin := Vector3.ZERO
 var _has_prev_tip := false
@@ -160,6 +172,82 @@ func _build_ui_panel() -> void:
 	ui_panel.material_override = mat
 	ui_panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ui_panel)
+
+
+# Moves the game's HUD elements out of the full-screen UI onto their own world-space panels.
+func attach_hud_overlays(ui) -> void:
+	_add_overlay(ui.take_hud_panel(), STAT_BAR_ANGLES, Vector2(0.0, 1.0))
+	_add_overlay(ui.take_minimap(), MINIMAP_ANGLES, Vector2(1.0, 1.0))
+	_add_overlay(ui.take_info_panel(), DEBUG_PANEL_ANGLES, Vector2(-1.0, 1.0))
+
+
+# anchor: which point of the quad sits at the given angles, in quad half-extents (-1..1; x right, y up).
+func _add_overlay(control: Control, angles: Vector2, anchor: Vector2) -> void:
+	var vp := SubViewport.new()
+	vp.name = "%sViewport" % control.name
+	vp.transparent_bg = true
+	vp.disable_3d = true
+	vp.size_2d_override_stretch = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+	vp.add_child(control)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.no_depth_test = true
+	mat.disable_fog = true
+	mat.render_priority = 9 # below the menu panel
+	mat.albedo_texture = vp.get_texture()
+	var quad := MeshInstance3D.new()
+	quad.name = "%sPanel" % control.name
+	quad.mesh = QuadMesh.new()
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(quad)
+	var o := {"control": control, "viewport": vp, "quad": quad, "angles": angles, "anchor": anchor}
+	overlays.append(o)
+	control.resized.connect(_fit_overlay.bind(o))
+	control.visibility_changed.connect(func(): quad.visible = control.visible)
+	quad.visible = control.visible
+	_fit_overlay(o)
+
+
+func _fit_overlay(o: Dictionary) -> void:
+	var control: Control = o.control
+	var px := Vector2i(ceili(control.size.x), ceili(control.size.y))
+	if px.x <= 0 or px.y <= 0:
+		return
+	control.position = Vector2.ZERO
+	var vp: SubViewport = o.viewport
+	var ss := mini(OVERLAY_SUPERSAMPLE, 16384 / maxi(px.x, px.y))
+	vp.size = px * maxi(1, ss)
+	vp.size_2d_override = px
+	(o.quad.mesh as QuadMesh).size = Vector2(px) * OVERLAY_PIXEL
+
+
+# Body-locked placement: overlays share one lazily-following yaw and ignore the menu, so they never jump.
+func _place_overlays(delta: float, head_yaw: float, hp: Vector3) -> void:
+	if overlays.is_empty():
+		return
+	if is_inf(_hud_yaw):
+		_hud_yaw = head_yaw
+	var diff := angle_difference(_hud_yaw, head_yaw)
+	if absf(diff) > UI_FOLLOW_ANGLE:
+		_hud_following = true
+	if _hud_following:
+		_hud_yaw += diff * minf(1.0, UI_FOLLOW_SPEED * delta)
+		if absf(angle_difference(_hud_yaw, head_yaw)) < 0.02:
+			_hud_following = false
+	for o: Dictionary in overlays:
+		var quad: MeshInstance3D = o.quad
+		var a: Vector2 = o.angles
+		# Faces the head: the quad's +Z points back along the view ray.
+		var b := Basis(Vector3.UP, _hud_yaw + deg_to_rad(-a.x)) * Basis(Vector3.RIGHT, deg_to_rad(a.y))
+		var anchor_pos := hp + b * Vector3(0, 0, -OVERLAY_DISTANCE)
+		var half: Vector2 = (quad.mesh as QuadMesh).size * 0.5
+		var anchor: Vector2 = o.anchor
+		quad.global_basis = b
+		quad.global_position = anchor_pos - b * Vector3(anchor.x * half.x, anchor.y * half.y, 0.0)
 
 
 func _build_laser() -> void:
@@ -475,14 +563,9 @@ func _place_ui_panel(delta: float) -> void:
 			_panel_following = false
 	var fwd := Vector3(-sin(_panel_yaw), 0.0, -cos(_panel_yaw))
 	var hp := head.global_position
-	var pos := hp + fwd * UI_DISTANCE
-	if not menu:
-		pos.y -= UI_HUD_DROP
-	ui_panel.global_position = pos
+	ui_panel.global_position = hp + fwd * UI_DISTANCE
 	ui_panel.global_basis = Basis(Vector3.UP, _panel_yaw)
-	if not menu:
-		# tilt the HUD toward the eyes
-		ui_panel.rotate_object_local(Vector3.RIGHT, atan2(UI_HUD_DROP, UI_DISTANCE))
+	_place_overlays(delta, head_yaw, hp)
 
 
 func _update_pointer(trigger_down: bool) -> void:
