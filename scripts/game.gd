@@ -1625,8 +1625,9 @@ func is_melee_weapon() -> bool:
 	return not spell_counts.has(current_gun_name())
 
 
-func on_xr_swing_started() -> void:
-	audio.play_sound(AudioManager.random_sound(SWISH_SOUNDS), 0.5)
+# strength: swing speed relative to the start threshold (1.0 = just fast enough); harder swings sound louder.
+func on_xr_swing_started(strength: float = 1.0) -> void:
+	audio.play_sound(AudioManager.random_sound(SWISH_SOUNDS), clampf(0.3 + 0.2 * strength, 0.4, 0.75))
 
 
 # Damages a monster with the current melee weapon; shared by the desktop attack animation and VR swings.
