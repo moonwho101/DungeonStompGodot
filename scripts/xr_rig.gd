@@ -39,8 +39,8 @@ const UI_FOLLOW_SPEED := 4.0
 const OVERLAY_DISTANCE := 1.4 * UNITS_PER_METER
 const OVERLAY_PIXEL := UI_WIDTH / 1280.0 # world size of one overlay pixel (GameUI.HUD_SCALE sets the stat bar's pixels)
 const OVERLAY_SUPERSAMPLE := 2 # render overlays at this multiple of their pixel size for sharp text
-const DEBUG_PANEL_ANGLES := Vector2(-38.0, 26.0) # top-left corner of the debug panel
-const MINIMAP_ANGLES := Vector2(38.0, 26.0) # top-right corner of the minimap
+const DEBUG_PANEL_ANGLES := Vector2(-38.0, 20.0) # top-left corner of the debug panel
+const MINIMAP_ANGLES := Vector2(38.0, 20.0) # top-right corner of the minimap
 const STAT_BAR_ANGLES := Vector2(0.0, -30.0) # top edge (centre) of the stat bar
 
 var game # Game (untyped to avoid a class cycle)
