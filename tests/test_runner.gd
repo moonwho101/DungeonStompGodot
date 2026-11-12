@@ -100,14 +100,28 @@ func _xr_tests(models: Parsers.ModelListParser) -> void:
 	rig.weapon_anchor.free()
 	rig.free()
 
-	var s := XRRig.new_swing_state()
-	check(XRRig.swing_step(s, XRRig.SWING_START_SPEED * 0.5, 0.016) == "", "slow motion is not a swing")
-	check(XRRig.swing_step(s, XRRig.SWING_START_SPEED * 1.2, 0.016) == "start", "fast motion starts a swing")
-	check(XRRig.swing_step(s, XRRig.SWING_START_SPEED * 1.2, 0.016) == "", "swing continues without restarting")
-	check(XRRig.swing_step(s, XRRig.SWING_END_SPEED * 0.5, 0.016) == "end", "swing ends when the tip slows")
-	check(XRRig.swing_step(s, XRRig.SWING_START_SPEED * 2.0, 0.016) == "", "cooldown blocks an immediate new swing")
-	XRRig.swing_step(s, 0.0, XRRig.SWING_COOLDOWN)
-	check(XRRig.swing_step(s, XRRig.SWING_START_SPEED * 2.0, 0.016) == "start", "new swing after cooldown")
+	var dt := 1.0 / 90.0
+	var m := XRRig.UNITS_PER_METER
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1234
+	var jitter := PackedVector3Array()
+	for i in 270:
+		jitter.append(Vector3(rng.randf_range(-0.002, 0.002), rng.randf_range(-0.002, 0.002), rng.randf_range(-0.002, 0.002)) * m)
+	check(_count_swings(jitter, dt) == 0, "tracking jitter at rest makes no swing sound")
+	var twitch := PackedVector3Array()
+	for i in 90:
+		var off := 0.04 if i % 30 in [10, 11] else 0.0 # 4 cm jerk for two frames, a few times
+		twitch.append(Vector3(off, 0, 0) * m)
+	check(_count_swings(twitch, dt) == 0, "small quick twitches make no swing sound")
+	check(_count_swings(_swing_path(0.5, 1.0, dt), dt) == 0, "slowly repositioning the weapon makes no swing sound")
+	check(_count_swings(_swing_path(0.15, 0.12, dt), dt) == 0, "short flick (15 cm) makes no swing sound")
+	check(_count_swings(_swing_path(0.6, 0.22, dt), dt) == 1, "a real swing (60 cm in 0.22 s) plays exactly one swing")
+	var two := _swing_path(0.6, 0.22, dt)
+	for i in 45:
+		two.append(two[two.size() - 1])
+	for p in _swing_path(0.6, 0.22, dt):
+		two.append(Vector3(0.6 * m, 0, 0) - p) # swing back the other way
+	check(_count_swings(two, dt) == 2, "two real swings half a second apart play two swings")
 
 	var bmin := Vector3(-20, 0, -20)
 	var bmax := Vector3(20, 80, 20)
@@ -117,3 +131,30 @@ func _xr_tests(models: Parsers.ModelListParser) -> void:
 
 	var merged := XRRig.merge_input({"move_x": 0.5, "jump": false}, {"move_x": 0.8, "jump": true, "turn": 0.3})
 	check(is_equal_approx(merged.move_x, 1.0) and merged.jump and is_equal_approx(merged.turn, 0.3), "gamepad and XR input merge")
+
+
+# Hand path (relative to the head) moving `meters` along X over `seconds` with an eased (sine) speed profile,
+# padded with a short rest before and after.
+func _swing_path(meters: float, seconds: float, dt: float) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for i in 10:
+		out.append(Vector3.ZERO)
+	var n := maxi(1, roundi(seconds / dt))
+	for i in n + 1:
+		var k := 0.5 - 0.5 * cos(PI * float(i) / n)
+		out.append(Vector3(meters * k * XRRig.UNITS_PER_METER, 0, 0))
+	for i in 20:
+		out.append(out[out.size() - 1])
+	return out
+
+
+# Runs a hand path through the same smoothing + state machine XRRig uses and counts swing sounds.
+func _count_swings(path: PackedVector3Array, dt: float) -> int:
+	var state := XRRig.new_swing_state()
+	var speed := 0.0
+	var starts := 0
+	for i in range(1, path.size()):
+		speed = XRRig.smooth_speed(speed, (path[i] - path[i - 1]).length() / dt, dt)
+		if XRRig.swing_step(state, speed, dt) == "start":
+			starts += 1
+	return starts

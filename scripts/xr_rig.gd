@@ -12,9 +12,13 @@ extends Node3D
 const UNITS_PER_METER := 60.0 # CollisionWorld.EYE_HEIGHT (100 units) ~ 1.7 m
 const STICK_DEADZONE := 0.15
 const TURN_SPEED := 2.4 # rad/s, smooth turn on the right stick
-const SWING_START_SPEED := 1.6 * UNITS_PER_METER # weapon tip speed (units/s) that starts a swing
-const SWING_END_SPEED := 1.0 * UNITS_PER_METER # swing continues until the tip slows below this
-const SWING_COOLDOWN := 0.25 # seconds after a swing ends before another can start
+# Swing detection uses the hand's speed relative to the head (m/s × UNITS_PER_METER).
+const SWING_START_SPEED := 1.8 * UNITS_PER_METER # hand speed needed to start a swing
+const SWING_END_SPEED := 0.8 * UNITS_PER_METER # swing ends when the hand slows below this
+const SWING_MIN_TRAVEL := 0.2 * UNITS_PER_METER # hand must travel this far above start speed before it counts
+const SWING_MAX_WINDUP := 0.3 # seconds; slower build-ups than this aren't a swing
+const SWING_SPEED_SMOOTHING := 0.035 # seconds; filters tracking jitter / one-frame spikes
+const SWING_COOLDOWN := 0.3 # seconds after a swing ends before another can start
 const HIT_PADDING := 6.0 # inflates monster boxes for blade hit tests
 const LASER_LENGTH := 4.0 * UNITS_PER_METER
 
@@ -71,7 +75,8 @@ var _panel_was_menu := false
 var _hud_yaw := INF
 var _hud_following := true
 var _prev_tip_origin := Vector3.ZERO
-var _prev_pommel_origin := Vector3.ZERO
+var _prev_hand_rel := Vector3.ZERO
+var _hand_speed := 0.0
 var _has_prev_tip := false
 var _pointer_pressed := false
 var _hit_this_swing: Array = []
@@ -336,23 +341,48 @@ static func weapon_grip_transform(verts: PackedVector3Array, grip_fraction: floa
 
 # ---------------------------------------------------------------- Swing melee
 
+enum SwingPhase { IDLE, WINDUP, SWING, COOLDOWN }
+
 static func new_swing_state() -> Dictionary:
-	return {"active": false, "cooldown": 0.0}
+	return {"phase": SwingPhase.IDLE, "travel": 0.0, "time": 0.0, "cooldown": 0.0}
 
 
-# Advances the swing state machine for the current tip speed (units/s).
-# Returns "start" when a swing begins, "end" when it finishes, or "" otherwise.
-static func swing_step(state: Dictionary, tip_speed: float, delta: float) -> String:
-	if state.active:
-		if tip_speed < SWING_END_SPEED:
-			state.active = false
-			state.cooldown = SWING_COOLDOWN
-			return "end"
-		return ""
-	state.cooldown = maxf(0.0, state.cooldown - delta)
-	if state.cooldown <= 0.0 and tip_speed >= SWING_START_SPEED:
-		state.active = true
-		return "start"
+# Exponential smoothing of the measured speed so single-frame tracking spikes are ignored.
+static func smooth_speed(current: float, raw: float, delta: float) -> float:
+	return lerpf(current, raw, 1.0 - exp(-delta / SWING_SPEED_SMOOTHING))
+
+
+# Advances the swing state machine for the current (smoothed) hand speed in units/s.
+# A swing only counts once the hand is moving faster than SWING_START_SPEED and has kept that up long enough to
+# cover SWING_MIN_TRAVEL; quick twitches, wrist turns and repositioning the weapon never qualify.
+# Returns "start" when a real swing begins, "end" when it finishes, or "" otherwise.
+static func swing_step(state: Dictionary, speed: float, delta: float) -> String:
+	match state.phase:
+		SwingPhase.COOLDOWN:
+			state.cooldown -= delta
+			if state.cooldown <= 0.0 and speed < SWING_END_SPEED:
+				state.phase = SwingPhase.IDLE
+		SwingPhase.IDLE:
+			if speed >= SWING_START_SPEED:
+				state.phase = SwingPhase.WINDUP
+				state.travel = speed * delta
+				state.time = delta
+		SwingPhase.WINDUP:
+			if speed < SWING_START_SPEED:
+				state.phase = SwingPhase.IDLE
+			else:
+				state.travel += speed * delta
+				state.time += delta
+				if state.travel >= SWING_MIN_TRAVEL:
+					state.phase = SwingPhase.SWING
+					return "start"
+				if state.time > SWING_MAX_WINDUP:
+					state.phase = SwingPhase.IDLE
+		SwingPhase.SWING:
+			if speed < SWING_END_SPEED:
+				state.phase = SwingPhase.COOLDOWN
+				state.cooldown = SWING_COOLDOWN
+				return "end"
 	return ""
 
 
@@ -366,26 +396,34 @@ static func blade_hits_box(box_min: Vector3, box_max: Vector3, pad: float, pomme
 	return box.intersects_segment(pommel, tip) != null or box.intersects_segment(prev_tip, tip) != null
 
 
-func _update_swing(delta: float, can_hit: bool) -> void:
+# Hand speed relative to the head, so leaning, stepping, smooth turning and locomotion don't count as swinging.
+# Using the hand (not the blade tip, ~0.7 m out) means small wrist turns don't register.
+func _hand_position_from_head() -> Vector3:
 	var inv := origin.global_transform.affine_inverse()
+	return inv * right_grip.global_position - head.position
+
+
+func _update_swing(delta: float, can_hit: bool) -> void:
 	var hand_xf: Transform3D = (weapon_anchor.get_parent() as Node3D).global_transform
 	var tip_world: Vector3 = hand_xf * weapon_tip_local
 	var pommel_world: Vector3 = hand_xf * weapon_pommel_local
-	# Measured in origin space so locomotion and smooth turning don't count as swinging.
-	var tip_o: Vector3 = inv * tip_world
-	var pommel_o: Vector3 = inv * pommel_world
+	var tip_o: Vector3 = origin.global_transform.affine_inverse() * tip_world
+	var hand_rel := _hand_position_from_head()
 	if not _has_prev_tip or delta <= 0.0:
 		_prev_tip_origin = tip_o
-		_prev_pommel_origin = pommel_o
+		_prev_hand_rel = hand_rel
+		_hand_speed = 0.0
 		_has_prev_tip = true
 		return
-	var speed: float = (tip_o - _prev_tip_origin).length() / delta
+	var raw_speed: float = (hand_rel - _prev_hand_rel).length() / delta
+	_hand_speed = smooth_speed(_hand_speed, raw_speed, delta)
 	var prev_tip_world: Vector3 = origin.global_transform * _prev_tip_origin
-	var ev := swing_step(swing_state, speed if can_hit else 0.0, delta)
+	var ev := swing_step(swing_state, _hand_speed if can_hit else 0.0, delta)
 	if ev == "start":
 		_hit_this_swing.clear()
-		game.on_xr_swing_started()
-	if swing_state.active and can_hit:
+		game.on_xr_swing_started(_hand_speed / SWING_START_SPEED)
+		haptic(40, 0.25)
+	if swing_state.phase == SwingPhase.SWING and can_hit:
 		var dir: Vector3 = tip_world - prev_tip_world
 		dir = dir.normalized() if dir.length_squared() > 1e-6 else -head.global_basis.z
 		for m in game.monsters:
@@ -396,7 +434,7 @@ func _update_swing(delta: float, can_hit: bool) -> void:
 				game.apply_melee_hit(m, dir)
 				haptic(120, 0.9)
 	_prev_tip_origin = tip_o
-	_prev_pommel_origin = pommel_o
+	_prev_hand_rel = hand_rel
 
 # ---------------------------------------------------------------- Input
 
