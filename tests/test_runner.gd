@@ -38,6 +38,11 @@ func _init() -> void:
 	var goblin := models.get_model_by_name("GOBLIN")
 	check(goblin != null and goblin.is_md2() and goblin.monster_weapon == "GOBLINAXE", "modellist GOBLIN entry")
 
+	for m_name in ["FULIMO", "OKTA", "SORB"]:
+		var cfg := Monster.get_config(m_name)
+		check(cfg.canCastSpells == true and cfg.spells.size() > 0 and cfg.attackRange > 100.0 and cfg.stopDistance > 100.0 and cfg.spellCooldown > 0.0,
+			"%s spellcaster config" % m_name)
+
 	var level := Parsers.LevelMapParser.new()
 	level.parse_file("bin/level1.map")
 	check(level.instances.size() == 1991, "level1.map instances (%d)" % level.instances.size())
