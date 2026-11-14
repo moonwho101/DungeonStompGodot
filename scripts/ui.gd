@@ -315,7 +315,7 @@ func _refresh_info() -> void:
 	var v := _info_values
 	var nm_on: bool = v.normalmap
 	var mu_on: bool = v.music
-	var t := "[b][color=#f59e0b]Dungeon Stomp Godot - by Mark Longo Copyright 2026[/color][/b]\n"
+	var t := "[b][color=#f59e0b]Dungeon Stomp Godot - by Mark Longo Copyright 2001-%d[/color][/b]\n" % Time.get_date_dict_from_system().year
 	t += "Mode: [color=%s]%s[/color]\n" % [v.mode_color, v.mode]
 	t += "Position: %s\n" % v.pos
 	t += "Depth: [color=#38bdf8]%s[/color] | Objects: %s | Lights: %s\n" % [v.depth, v.obj, v.light]
@@ -695,6 +695,10 @@ func _build_menu(root: Control) -> void:
 	var title := _label("⚔️ DUNGEON STOMP ⚔️", _font_bold, 24, AMBER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outer.add_child(title)
+	var credit := _label("Created by Mark Longo · Copyright © 2001-%d" % Time.get_date_dict_from_system().year,
+		_font, 12, Color("#94a3b8"))
+	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	outer.add_child(credit)
 
 	# Main view
 	var main := VBoxContainer.new()
@@ -713,8 +717,11 @@ func _build_menu(root: Control) -> void:
 	_status = _label("", _font, 13, Color("#38bdf8"))
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main.add_child(_status)
-	main.add_child(_help("WASD = Move   ·   Space = Jump   ·   E = Open Door   ·   G = Regen Dungeon   ·   Q/Z = Weapon   ·   Esc = Menu"))
-	main.add_child(_help("🎮 L-Stick = Move (L3 Sprint)   ·   R-Stick = Look (R3 Level)   ·   RT = Attack / Cast   ·   X = Open Door/Chest   ·   A = Jump / Confirm   ·   LB/RB = Weapon   ·   LT = Sprint   ·   Start = Menu"))
+	if game != null and game.xr_rig != null:
+		main.add_child(_help("🥽 L-Stick = Move (Click to Sprint)   ·   R-Stick = Turn   ·   Swing Weapon = Melee Attack   ·   Trigger = Cast Spell / Select   ·   A = Jump   ·   B = Open Door/Chest / Back   ·   X/Y = Weapon   ·   ☰ Menu = Menu"))
+	else:
+		main.add_child(_help("⌨️ WASD = Move   ·   Mouse = Look   ·   Left Click = Attack / Cast   ·   Shift = Sprint   ·   Space = Jump   ·   E = Open Door/Chest   ·   Q/Z = Weapon   ·   F = Fly   ·   G = Regen Dungeon   ·   H = HUD   ·   Esc = Menu"))
+		main.add_child(_help("🎮 L-Stick = Move (L3 Sprint)   ·   R-Stick = Look (R3 Level)   ·   RT = Attack / Cast   ·   X = Open Door/Chest   ·   A = Jump / Confirm   ·   LB/RB = Weapon   ·   LT = Sprint   ·   Start = Menu"))
 	main.add_child(_help("Find the glowing exit portal to descend — every level is tougher."))
 	outer.add_child(main)
 	_views["main"] = main
