@@ -30,6 +30,9 @@ const WEAPON_GRIP_FRACTION_OVERRIDES := {"weaponsorcerer": 0.4}
 const WEAPON_OFFSET := Vector3.ZERO # extra anchor offset in grip space (units)
 const WEAPON_ROT_DEG := Vector3.ZERO # extra anchor rotation in grip space (degrees)
 
+const REFRESH_RATE := 90.0 # Hz; used when the headset offers it (Quest 3: 72/80/90/120)
+const RENDER_SCALE := 1.25 # multiplier on the runtime's recommended per-eye resolution (Quest 3 ~1.25 ≈ panel res)
+
 const UI_SIZE := Vector2i(1920, 1080)
 const UI_BASE_SIZE := Vector2i(1280, 720) # smaller layout canvas than desktop so text is readable on the panel
 const UI_WIDTH := 1.6 * UNITS_PER_METER
@@ -107,6 +110,11 @@ func _ready() -> void:
 	if not simulated:
 		get_viewport().use_xr = true
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		var xr := XRServer.find_interface("OpenXR") as OpenXRInterface
+		if xr != null:
+			xr.render_target_size_multiplier = RENDER_SCALE
+			xr.session_begun.connect(_apply_refresh_rate.bind(xr))
+			_apply_refresh_rate(xr)
 
 	origin = XROrigin3D.new()
 	origin.name = "XROrigin"
@@ -140,6 +148,18 @@ func _ready() -> void:
 		right_grip.rotation_degrees = Vector3(35, 10, 0)
 		right_aim.transform = right_grip.transform
 		left_hand.position = Vector3(-18, CollisionWorld.EYE_HEIGHT - 35, -30)
+
+
+# Picks REFRESH_RATE, or the fastest offered rate below it. The list is empty until the session has begun.
+func _apply_refresh_rate(xr: OpenXRInterface) -> void:
+	var best := 0.0
+	for r in xr.get_available_display_refresh_rates():
+		if r <= REFRESH_RATE + 0.5 and r > best:
+			best = r
+	if best > 0.0 and not is_equal_approx(xr.display_refresh_rate, best):
+		xr.display_refresh_rate = best
+	if best > 0.0:
+		print("OpenXR: %.0f Hz, render scale %.2f" % [xr.display_refresh_rate, xr.render_target_size_multiplier])
 
 
 func _controller(node_name: String, tracker: StringName, pose: StringName) -> XRController3D:
