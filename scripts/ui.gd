@@ -173,6 +173,7 @@ func _vignette(root: Control, color: Color, inner: float) -> ShaderMaterial:
 	mat.set_shader_parameter("edge_color", color)
 	mat.set_shader_parameter("inner", inner)
 	rect.material = mat
+	rect.visible = false # shown only while a flash is fading in/out
 	root.add_child(rect)
 	_flash = rect
 	return mat
@@ -205,11 +206,13 @@ func _build_overlays(root: Control) -> void:
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	root.add_child(_death)
 
-	var cross := Crosshair.new()
-	cross.set_anchors_preset(Control.PRESET_CENTER)
-	cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(cross)
-	_hud_items.append(cross)
+	# In VR aiming comes from the controllers, so a crosshair on the body-locked UI panel would be misleading.
+	if game == null or game.xr_rig == null:
+		var cross := Crosshair.new()
+		cross.set_anchors_preset(Control.PRESET_CENTER)
+		cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(cross)
+		_hud_items.append(cross)
 
 
 class Crosshair:
@@ -312,6 +315,8 @@ func _build_info(root: Control) -> void:
 
 
 func _refresh_info() -> void:
+	if not SHOW_DEBUG_PANEL:
+		return # the panel is never shown; skip rebuilding its BBCode (position updates 10x per second)
 	var v := _info_values
 	var nm_on: bool = v.normalmap
 	var mu_on: bool = v.music
@@ -453,6 +458,8 @@ func _build_hud(root: Control) -> void:
 	_xp_fill = xp[0]
 	_kills_text = _badge("KILLS", "0", Color("#f43f5e"))
 	_gun_text = _badge("WEAPON", "AXE", AMBER, 13, 120)
+	_set_fill(_hp_fill, _hp_cur)
+	_set_fill(_xp_fill, _xp_cur)
 
 
 # Keeps the HUD anchored bottom-centre and shrinks it if it would be wider than the screen. In VR the HUD has
@@ -545,6 +552,7 @@ func _build_toast(root: Control) -> void:
 	_toast.offset_top = 24
 	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast.modulate.a = 0.0
+	_toast.visible = false
 	_toast_label = _label("", _font_bold, 14, AMBER)
 	_toast.add_child(_toast_label)
 	root.add_child(_toast)
@@ -556,25 +564,45 @@ func toast(message: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# Each element is only touched while it is changing, so an idle HUD doesn't redraw every frame.
 	# Damage / pickup flash (opacity transition 0.15 s ease-out)
 	if _flash_hold > 0.0:
 		_flash_hold -= delta
 		if _flash_hold <= 0.0:
 			_flash_target = 0.0
-	_flash_opacity = move_toward(_flash_opacity, _flash_target, delta / 0.15)
-	_flash_mat.set_shader_parameter("opacity", _flash_opacity)
+	if _flash_opacity != _flash_target:
+		_flash_opacity = move_toward(_flash_opacity, _flash_target, delta / 0.15)
+		_flash_mat.set_shader_parameter("opacity", _flash_opacity)
+		_flash.visible = _flash_opacity > 0.0
 	# Bars ease towards their targets (CSS width transition 0.2 s)
-	_hp_cur = lerpf(_hp_cur, _hp_target, minf(1.0, delta * 12.0))
-	_xp_cur = lerpf(_xp_cur, _xp_target, minf(1.0, delta * 12.0))
-	_set_fill(_hp_fill, _hp_cur)
-	_set_fill(_xp_fill, _xp_cur)
+	_hp_cur = _ease_fill(_hp_fill, _hp_cur, _hp_target, delta)
+	_xp_cur = _ease_fill(_xp_fill, _xp_cur, _xp_target, delta)
 	# Toast slide in/out
+	var a := _toast.modulate.a
 	if _toast_timer > 0.0:
 		_toast_timer -= delta
-		_toast.modulate.a = move_toward(_toast.modulate.a, 1.0, delta / 0.3)
+		a = move_toward(a, 1.0, delta / 0.3)
 	else:
-		_toast.modulate.a = move_toward(_toast.modulate.a, 0.0, delta / 0.3)
-	_toast.offset_top = lerpf(-36.0, 24.0, _toast.modulate.a)
+		a = move_toward(a, 0.0, delta / 0.3)
+	if a != _toast.modulate.a:
+		_toast.modulate.a = a
+		_toast.offset_top = lerpf(-36.0, 24.0, a)
+		_toast.visible = a > 0.0
+
+
+func _ease_fill(fill: ColorRect, cur: float, target: float, delta: float) -> float:
+	if cur == target:
+		return cur
+	cur = lerpf(cur, target, minf(1.0, delta * 12.0))
+	if absf(cur - target) < 0.001:
+		cur = target
+	_set_fill(fill, cur)
+	return cur
+
+
+# True while the full-screen UI layer has something to draw (VR hides its world-space panel otherwise).
+func has_screen_content() -> bool:
+	return _menu.visible or _loading.visible or _death.visible or _toast.visible or _flash.visible
 
 
 func _set_fill(fill: ColorRect, pct: float) -> void:

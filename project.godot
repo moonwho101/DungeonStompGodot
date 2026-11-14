@@ -46,4 +46,6 @@ ds_normal_maps={
 
 openxr/enabled=true
 openxr/startup_alert=false
+openxr/foveation_level=3
+openxr/foveation_dynamic=true
 shaders/enabled=true

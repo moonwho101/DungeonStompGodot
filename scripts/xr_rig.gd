@@ -109,6 +109,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not simulated:
 		get_viewport().use_xr = true
+		# Lets the runtime's fixed/dynamic foveation (xr/openxr/foveation_*) apply on the Mobile renderer.
+		get_viewport().vrs_mode = Viewport.VRS_XR
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 		var xr := XRServer.find_interface("OpenXR") as OpenXRInterface
 		if xr != null:
@@ -234,9 +236,16 @@ func _add_overlay(control: Control, angles: Vector2, anchor: Vector2) -> void:
 	var o := {"control": control, "viewport": vp, "quad": quad, "angles": angles, "anchor": anchor}
 	overlays.append(o)
 	control.resized.connect(_fit_overlay.bind(o))
-	control.visibility_changed.connect(func(): quad.visible = control.visible)
-	quad.visible = control.visible
+	control.visibility_changed.connect(_sync_overlay_visibility.bind(o))
+	_sync_overlay_visibility(o)
 	_fit_overlay(o)
+
+
+# Hidden overlays (e.g. the debug panel, or the HUD when switched off) stop rendering their viewport.
+func _sync_overlay_visibility(o: Dictionary) -> void:
+	var shown: bool = (o.control as Control).visible
+	(o.quad as MeshInstance3D).visible = shown
+	(o.viewport as SubViewport).render_target_update_mode = SubViewport.UPDATE_ALWAYS if shown else SubViewport.UPDATE_DISABLED
 
 
 func _fit_overlay(o: Dictionary) -> void:
@@ -609,6 +618,7 @@ func sync_body(delta: float, playing: bool) -> void:
 # ---------------------------------------------------------------- UI panel and pointer
 
 func _place_ui_panel(delta: float) -> void:
+	_sync_ui_panel_visibility()
 	var menu: bool = game.ui.is_menu_visible()
 	var head_yaw := _yaw_of(head.global_basis)
 	if is_inf(_panel_yaw):
@@ -626,6 +636,16 @@ func _place_ui_panel(delta: float) -> void:
 	ui_panel.global_position = hp + fwd * UI_DISTANCE
 	ui_panel.global_basis = Basis(Vector3.UP, _panel_yaw)
 	_place_overlays(delta, head_yaw, hp)
+
+
+# The full-screen UI panel is usually empty during play; hiding it skips its 1920x1080 viewport render and a
+# large alpha-blended quad in both eyes.
+func _sync_ui_panel_visibility() -> void:
+	var shown: bool = game.ui.has_screen_content()
+	if shown == ui_panel.visible:
+		return
+	ui_panel.visible = shown
+	ui_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if shown else SubViewport.UPDATE_DISABLED
 
 
 func _update_pointer(trigger_down: bool) -> void:

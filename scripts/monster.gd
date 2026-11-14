@@ -322,6 +322,15 @@ func get_current_pose() -> Array:
 	return [anim.start + frame_offset, anim.start + next_offset, alpha]
 
 
+static func _add_pose_weight(frames: Array, weights: Array, frame: int, w: float) -> void:
+	var k := frames.find(frame)
+	if k != -1:
+		weights[k] += w
+	else:
+		frames.append(frame)
+		weights.append(w)
+
+
 func _update_morph_targets(delta: float) -> void:
 	anim_timer += delta
 	var anim := current_anim
@@ -331,26 +340,19 @@ func _update_morph_targets(delta: float) -> void:
 	var cur := get_current_pose()
 	var frames: Array = []
 	var weights: Array = []
-	var add := func(frame: int, w: float) -> void:
-		var k := frames.find(frame)
-		if k != -1:
-			weights[k] += w
-		else:
-			frames.append(frame)
-			weights.append(w)
 	if not prev_pose.is_empty() and fade_timer < fade_duration:
 		fade_timer += delta
 		var blend := minf(1.0, fade_timer / fade_duration)
 		var inv := 1.0 - blend
-		add.call(prev_pose[0], (1.0 - prev_pose[2]) * inv)
-		add.call(prev_pose[1], prev_pose[2] * inv)
-		add.call(cur[0], (1.0 - cur[2]) * blend)
-		add.call(cur[1], cur[2] * blend)
+		_add_pose_weight(frames, weights, prev_pose[0], (1.0 - prev_pose[2]) * inv)
+		_add_pose_weight(frames, weights, prev_pose[1], prev_pose[2] * inv)
+		_add_pose_weight(frames, weights, cur[0], (1.0 - cur[2]) * blend)
+		_add_pose_weight(frames, weights, cur[1], cur[2] * blend)
 	else:
 		prev_pose = []
-		add.call(cur[0], 1.0 - cur[2])
+		_add_pose_weight(frames, weights, cur[0], 1.0 - cur[2])
 		if cur[2] > 1e-4:
-			add.call(cur[1], cur[2])
+			_add_pose_weight(frames, weights, cur[1], cur[2])
 	var kept_f: Array = []
 	var kept_w: Array = []
 	for k in frames.size():

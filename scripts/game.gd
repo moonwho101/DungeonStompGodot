@@ -52,6 +52,10 @@ const EXCLUDED_IDS := [6, 35, 131, 120]
 const EXCLUDED_NAMES := ["lamp_post", "!monster1", "startpos", "text"]
 const STATIC_CHUNK_SIZE := 1024.0
 const RENDER_DISTANCE := 3000.0
+# Distance culling walks every level object, so it runs a few times per second (or at once after a big move
+# such as a teleport) instead of every frame; objects are culled thousands of units away, so the lag is invisible.
+const CULL_INTERVAL := 0.1
+const CULL_MOVE_DISTANCE := 150.0
 const PLAYER_RESPAWN_DELAY := 3.0
 const PICKUP_DISTANCE := 70.0
 const MOUSE_SENSITIVITY := 0.002
@@ -134,6 +138,8 @@ var playing := false
 var teleporter_cooldown := 0.0
 var _autosave_timer := 0.0
 var _pos_display_timer := 0.0
+var _cull_timer := 0.0
+var _cull_pos := Vector3.INF
 var _time := 0.0
 var _auto_start := false
 var _shot_path := ""
@@ -719,6 +725,7 @@ func clear_current_world() -> void:
 		world_root.remove_child(child)
 		child.queue_free()
 	level_objects.clear()
+	_cull_timer = 0.0
 	active_pickups.clear()
 	doors.clear()
 	chests.clear()
@@ -1322,7 +1329,11 @@ func _process(delta: float) -> void:
 	_update_doors(dt)
 	audio.update_music(dt)
 	fx.update_lighting(_time, dt, pos)
-	_update_distance_culling(pos)
+	_cull_timer -= dt
+	if _cull_timer <= 0.0 or pos.distance_squared_to(_cull_pos) > CULL_MOVE_DISTANCE * CULL_MOVE_DISTANCE:
+		_cull_timer = CULL_INTERVAL
+		_cull_pos = pos
+		_update_distance_culling(pos)
 	ui.update_minimap(pos, camera)
 
 
