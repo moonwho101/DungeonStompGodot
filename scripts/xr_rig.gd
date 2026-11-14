@@ -159,7 +159,9 @@ func _apply_refresh_rate(xr: OpenXRInterface) -> void:
 	if best > 0.0 and not is_equal_approx(xr.display_refresh_rate, best):
 		xr.display_refresh_rate = best
 	if best > 0.0:
-		print("OpenXR: %.0f Hz, render scale %.2f" % [xr.display_refresh_rate, xr.render_target_size_multiplier])
+		var size := xr.get_render_target_size()
+		print("OpenXR: %.0f Hz, render scale %.2f, %dx%d per eye" % [xr.display_refresh_rate,
+			xr.render_target_size_multiplier, size.x, size.y])
 
 
 func _controller(node_name: String, tracker: StringName, pose: StringName) -> XRController3D:
