@@ -107,6 +107,10 @@ Copy the runtime data folders alongside the exported binary:
 cp -r Assets bin Sounds Midi build/windows/
 ```
 
+### Exporting Android / Meta Quest Builds
+
+The `dungeonstomp` Android preset needs no extra copy step. The [data_export](addons/data_export/plugin.gd) editor plugin (enabled in `project.godot`) packs `Assets/`, `bin/`, `Sounds/` and `Midi/` into the `.pck` during Android exports, and `DataPaths` reads them from `res://`. The plugin is required because those folders carry `.gdignore`, which hides them from the normal exporter.
+
 ### Running Automated Headless Tests
 
 Run the headless test suite to verify parsers, collision math, model loaders, and dungeon generation:
