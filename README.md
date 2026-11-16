@@ -30,6 +30,8 @@ Swing a flaming sword, hurl fireballs, cast lightning, and stomp through endless
 
 Players and monsters falling more than 1,000 units below the map's lowest collision geometry return to its `startpos` with velocity cleared and health unchanged. Monster attack range includes vertical separation (measured from each actor's feet), both when starting an attack and when delivering a melee hit or releasing a spell.
 
+Monster pursuit and strafing use collision-checked movement steps no larger than half their capsule radius, preventing low-FPS frames from carrying them through thin walls.
+
 ---
 
 ## ✨ Features

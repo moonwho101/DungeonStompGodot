@@ -72,6 +72,7 @@ func _run_tests() -> void:
 	var md2 := MD2Model.load_for_def(goblin)
 	check(md2 != null and md2.frame_count >= 198, "goblin.md2 loads with all frames")
 	_fall_and_attack_tests(md2)
+	_monster_movement_tests(md2)
 	var chest := TDSModel.load_for_def(models.get_model_by_name("cdoorclosedchest"))
 	check(chest != null and chest.has_geometry, "chest .3ds loads")
 
@@ -239,6 +240,54 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		caster.update(0.0, game.target)
 		check((game.shots == 1) == (height == 0.0),
 			"spell release rechecks height after windup (height %.0f)" % height)
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _monster_movement_tests(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(-500, 0, 500), Vector3(0, 0, 500))
+	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(0, 0, 500), Vector3(0, 0, -500))
+	game.collision.add_triangle(Vector3(0, 0, -200), Vector3(0, 300, -200), Vector3(0, 300, 200))
+	game.collision.add_triangle(Vector3(0, 0, -200), Vector3(0, 300, 200), Vector3(0, 0, 200))
+	game.collision.build_grid()
+	game.target = Vector3(500, 100, 0)
+	game.fall_recovery_y = -100000.0
+	var monster := _test_monster(game, model, "GOBLIN")
+	for fps in [60, 30, 15, 10]:
+		monster.position = Vector3(-24.01, 50.01, 0)
+		monster.velocity = Vector3.ZERO
+		monster.rotation_y = PI / 2.0
+		monster.state = Monster.State.CHASE
+		monster.is_grounded = true
+		var max_x := monster.position.x
+		var min_y := monster.position.y
+		for frame in fps:
+			monster.update(1.0 / fps, game.target)
+			max_x = maxf(max_x, monster.position.x)
+			min_y = minf(min_y, monster.position.y)
+		check(max_x <= -24.0 and min_y >= 50.0,
+			"monster stays behind thin wall and on floor at %d FPS (max x=%.2f, min y=%.2f)" % [fps, max_x, min_y])
+		if fps == 60:
+			monster.update(0.1, game.target)
+			check(monster.position.x <= -24.0 and monster.position.y >= 50.0,
+				"one 100 ms hitch during 60 FPS pursuit cannot cross a thin wall")
+
+	game.collision.clear()
+	game.target = Vector3(1000, 100, 0)
+	for fps in [60, 10]:
+		monster.position = Vector3(0, 50, 0)
+		monster.rotation_y = PI / 2.0
+		for frame in fps:
+			monster._move_forward(1.0 / fps, game.target)
+		check(absf(monster.position.x - monster.config.moveSpeed) < 0.01,
+			"subdivided pursuit preserves movement speed at %d FPS" % fps)
+		monster.position = Vector3(0, 50, 0)
+		monster.strafe_dir = 1.0
+		monster.strafe_timer = 2.0
+		monster._tactical_movement(1.0 / fps, 1000.0, game.target)
+		check(absf(monster.position.z - monster.config.moveSpeed * 0.65 / fps) < 0.01,
+			"subdivided strafing preserves movement speed at %d FPS" % fps)
 	game.world_root.free()
 	Monster.clear_shared()
 

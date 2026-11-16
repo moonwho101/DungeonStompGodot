@@ -590,9 +590,7 @@ func _tactical_movement(dt: float, dist: float, player_pos: Vector3) -> void:
 		move_x -= (dx / length) * 0.7
 		move_z -= (dz / length) * 0.7
 	var speed: float = config.moveSpeed * 0.65
-	position.x += move_x * speed * dt
-	position.z += move_z * speed * dt
-	_resolve(true, player_pos)
+	_move_horizontal(Vector3(move_x, 0, move_z) * speed * dt, player_pos)
 
 
 func _smooth_turn(target_angle: float, dt: float) -> void:
@@ -607,9 +605,17 @@ func _smooth_turn(target_angle: float, dt: float) -> void:
 
 func _move_forward(dt: float, player_pos: Vector3) -> void:
 	var move_dist: float = config.moveSpeed * dt
-	position.x += sin(rotation_y) * move_dist
-	position.z += cos(rotation_y) * move_dist
-	_resolve(true, player_pos)
+	_move_horizontal(Vector3(sin(rotation_y), 0, cos(rotation_y)) * move_dist, player_pos)
+
+
+func _move_horizontal(displacement: Vector3, player_pos: Vector3) -> void:
+	# Keep each move on the near side of thin walls, even during a long frame.
+	var max_step := CollisionWorld.MONSTER_CAPSULE_RADIUS * 0.5
+	var steps := maxi(1, ceili(displacement.length() / max_step))
+	var step := displacement / steps
+	for s in steps:
+		position += step
+		_resolve(true, player_pos)
 
 
 func set_state(new_state: int) -> void:
