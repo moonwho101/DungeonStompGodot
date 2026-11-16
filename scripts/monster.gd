@@ -402,6 +402,8 @@ func _resolve(with_others: bool, player_pos: Vector3) -> void:
 
 
 func update(delta: float, player_pos: Vector3) -> void:
+	if _recover_if_fallen():
+		return
 	var dt := minf(delta, 0.1)
 	var dx := player_pos.x - position.x
 	var dz := player_pos.z - position.z
@@ -435,6 +437,9 @@ func update(delta: float, player_pos: Vector3) -> void:
 		if is_grounded:
 			break
 
+	if _recover_if_fallen():
+		return
+
 	if state == State.DEATH:
 		mesh.position = position
 		if weapon_mesh != null:
@@ -450,9 +455,10 @@ func update(delta: float, player_pos: Vector3) -> void:
 		attack_cooldown = maxf(0.0, attack_cooldown - dt)
 	var target_angle := atan2(dx, dz)
 	_tick_ambient_noise(dt, dist)
+	var attack_dist := _attack_distance_to(player_pos)
 
 	var los: bool = not config.canCastSpells
-	if config.canCastSpells and state != State.IDLE and dist <= config.attackRange:
+	if config.canCastSpells and state != State.IDLE and attack_dist <= config.attackRange:
 		los_timer -= dt
 		if los_timer <= 0.0:
 			los_timer = 0.12 + randf() * 0.06
@@ -469,13 +475,13 @@ func update(delta: float, player_pos: Vector3) -> void:
 			_smooth_turn(target_angle, dt)
 			if dist > config.deaggroRadius:
 				set_state(State.IDLE)
-			elif dist <= config.attackRange and los:
+			elif attack_dist <= config.attackRange and los:
 				set_state(State.ATTACK)
 			elif state_timer >= config.alertDuration:
 				set_state(State.CHASE)
 		State.CHASE:
 			_smooth_turn(target_angle, dt)
-			if dist <= config.attackRange and los:
+			if attack_dist <= config.attackRange and los:
 				if attack_cooldown <= 0.0:
 					set_state(State.ATTACK)
 				elif config.canCastSpells:
@@ -507,14 +513,15 @@ func update(delta: float, player_pos: Vector3) -> void:
 							spell_color, 10.0, 0.4)
 					if anim_timer >= total_duration * 0.5:
 						has_dealt_damage = true
-						game.launch_monster_projectile(self, pending_spell if pending_spell != "" else "MAGIC MISSILE", player_pos)
+						if attack_dist <= config.attackRange and los:
+							game.launch_monster_projectile(self, pending_spell if pending_spell != "" else "MAGIC MISSILE", player_pos)
 				else:
 					if anim_timer >= total_duration * 0.5:
 						has_dealt_damage = true
 						var ws: String = config.get("weaponSound", "swish4.wav")
 						if dist <= 1200.0:
 							game.audio.play_sound(ws, maxf(0.05, (1.0 - dist / 1200.0) * 0.7))
-						if dist <= 115.0 + 20.0:
+						if attack_dist <= 115.0 + 20.0:
 							game.damage_player(config.damage)
 			if anim_complete:
 				attack_cooldown = config.spellCooldown if config.spellCooldown > 0.0 else 0.5
@@ -525,9 +532,43 @@ func update(delta: float, player_pos: Vector3) -> void:
 			if anim_complete:
 				set_state(State.CHASE)
 
+	if _recover_if_fallen():
+		return
 	_sync_transforms()
 	_update_morph_targets(dt)
 	_update_bounding_box()
+
+
+func _attack_distance_to(player_pos: Vector3) -> float:
+	# Compare feet so the player's eye origin and the monster's lower origin
+	# don't reduce attack reach when both stand on the same floor.
+	var player_feet := player_pos - Vector3(0, CollisionWorld.EYE_HEIGHT, 0)
+	var monster_feet := position - Vector3(0, CollisionWorld.MONSTER_FOOT_OFFSET, 0)
+	return monster_feet.distance_to(player_feet)
+
+
+func _recover_if_fallen() -> bool:
+	if position.y >= game.fall_recovery_y:
+		return false
+	push_warning("%s fell below the map; returning to startpos." % name)
+	position = game.player_start_pos
+	velocity = Vector3.ZERO
+	is_grounded = false
+	has_los = false
+	los_timer = 0.0
+	pending_spell = ""
+	has_dealt_damage = false
+	if state != State.DEATH:
+		set_state(State.IDLE)
+		set_animation(ANIMS.STAND, true)
+		attack_cooldown = 0.5
+	_sync_transforms()
+	_update_morph_targets(0.0)
+	_update_bounding_box()
+	if hp_bar != null:
+		hp_bar.position = position + Vector3(0, health_bar_height, 0)
+		hp_bar.visible = state != State.DEATH
+	return true
 
 
 func _tactical_movement(dt: float, dist: float, player_pos: Vector3) -> void:
@@ -547,9 +588,7 @@ func _tactical_movement(dt: float, dist: float, player_pos: Vector3) -> void:
 		move_x -= (dx / length) * 0.7
 		move_z -= (dz / length) * 0.7
 	var speed: float = config.moveSpeed * 0.65
-	position.x += move_x * speed * dt
-	position.z += move_z * speed * dt
-	_resolve(true, player_pos)
+	_move_horizontal(Vector3(move_x, 0, move_z) * speed * dt, player_pos)
 
 
 func _smooth_turn(target_angle: float, dt: float) -> void:
@@ -564,9 +603,17 @@ func _smooth_turn(target_angle: float, dt: float) -> void:
 
 func _move_forward(dt: float, player_pos: Vector3) -> void:
 	var move_dist: float = config.moveSpeed * dt
-	position.x += sin(rotation_y) * move_dist
-	position.z += cos(rotation_y) * move_dist
-	_resolve(true, player_pos)
+	_move_horizontal(Vector3(sin(rotation_y), 0, cos(rotation_y)) * move_dist, player_pos)
+
+
+func _move_horizontal(displacement: Vector3, player_pos: Vector3) -> void:
+	# Keep each move on the near side of thin walls, even during a long frame.
+	var max_step := CollisionWorld.MONSTER_CAPSULE_RADIUS * 0.5
+	var steps := maxi(1, ceili(displacement.length() / max_step))
+	var step := displacement / steps
+	for s in steps:
+		position += step
+		_resolve(true, player_pos)
 
 
 func set_state(new_state: int) -> void:
@@ -579,7 +626,7 @@ func set_state(new_state: int) -> void:
 	var player_pos: Vector3 = game.player_position()
 	if new_state == State.ATTACK:
 		has_dealt_damage = false
-		var d := position.distance_to(player_pos)
+		var d := _attack_distance_to(player_pos)
 		if config.canCastSpells and d <= 115.0:
 			is_melee_attack = true
 			pending_spell = ""
