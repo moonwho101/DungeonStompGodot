@@ -60,6 +60,7 @@ const PLAYER_RESPAWN_DELAY := 3.0
 const PICKUP_DISTANCE := 70.0
 const MOUSE_SENSITIVITY := 0.002
 const AUTOSAVE_INTERVAL := 5.0
+const FALL_RECOVERY_MARGIN := 1000.0
 
 const SAVE_KEY := "dungeonRunState"
 const GEN_OPTS_KEY := "dungeonGenerationOptions"
@@ -97,6 +98,7 @@ var current_map_text := ""
 var current_map_key := "bundled"
 var built_object_count := 0
 var light_count := 0
+var fall_recovery_y := -FALL_RECOVERY_MARGIN
 
 # Player state
 var velocity := Vector3.ZERO
@@ -863,11 +865,22 @@ func _build_game_world(override_map_text: String) -> void:
 		door.bounds_max = mx
 		collision.doors.append(door)
 
+	_update_fall_recovery_y()
 	ui.set_info("obj", str(built_object_count))
 	ui.set_info("light", str(light_count))
 	ui.set_info("depth", str(dungeon_depth))
 	ui.minimap.level_changed()
 	print("Level built in %d ms (%d triangles, %d monsters)" % [Time.get_ticks_msec() - t0, collision.triangle_count(), monsters.size()])
+
+
+func _update_fall_recovery_y() -> void:
+	var lowest_y := player_start_pos.y - CollisionWorld.EYE_HEIGHT
+	for p: Vector3 in collision.tmin:
+		lowest_y = minf(lowest_y, p.y)
+	for box: CollisionWorld.Box in collision.boxes:
+		if not box.is_empty():
+			lowest_y = minf(lowest_y, box.min.y)
+	fall_recovery_y = lowest_y - FALL_RECOVERY_MARGIN
 
 
 class MeshBucket:
@@ -1338,6 +1351,8 @@ func _process(delta: float) -> void:
 
 
 func _update_player_movement(delta: float, gp: Dictionary) -> void:
+	if _recover_player_if_fallen():
+		return
 	var sprint := is_sprinting or bool(gp.get("sprint", false))
 	var move_speed := 400.0 if sprint else 200.0
 	var gmx: float = gp.get("move_x", 0.0)
@@ -1356,6 +1371,7 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 		if move_down or gp.get("fly_down", false):
 			velocity.y -= move_speed * 8.0 * delta
 		camera.position += velocity * delta
+		_recover_player_if_fallen()
 		return
 
 	var damp_xz := pow(0.001, delta)
@@ -1400,6 +1416,8 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 		grounded = g or grounded
 	camera.position = pos
 	is_grounded = grounded
+	if _recover_player_if_fallen():
+		return
 
 	if is_grounded and (move_forward or move_backward or move_left or move_right or dir_len > 0.1):
 		if velocity.x * velocity.x + velocity.z * velocity.z > 400.0:
@@ -1411,6 +1429,18 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 			footstep_timer = 0.3
 	else:
 		footstep_timer = 0.3
+
+
+func _recover_player_if_fallen() -> bool:
+	if camera.position.y >= fall_recovery_y:
+		return false
+	push_warning("Player fell below the map; returning to startpos.")
+	camera.position = player_start_pos
+	velocity = Vector3.ZERO
+	is_grounded = false
+	jump_requested = false
+	footstep_timer = 0.0
+	return true
 
 
 func _update_distance_culling(pos: Vector3) -> void:

@@ -28,6 +28,8 @@ Everything runs natively in Godot with zero external plugin dependencies: origin
 
 Swing a flaming sword, hurl fireballs, cast lightning, and stomp through endless **procedurally generated dungeons** crawling with monsters, traps, and treasure.
 
+Players and monsters falling more than 1,000 units below the map's lowest collision geometry return to its `startpos` with velocity cleared and health unchanged. Monster attack range includes vertical separation (measured from each actor's feet), both when starting an attack and when delivering a melee hit or releasing a spell.
+
 ---
 
 ## ✨ Features
@@ -117,7 +119,7 @@ The shared materials use a custom per-pixel Lambert light function to preserve f
 
 ### Running Automated Headless Tests
 
-Run the headless test suite to verify parsers, collision math, model loaders, and dungeon generation:
+Run the headless test suite to verify parsers, collision math, model loaders, dungeon generation, fall recovery, and monster attack range:
 
 ```bash
 godot --headless --path . -s res://tests/test_runner.gd
