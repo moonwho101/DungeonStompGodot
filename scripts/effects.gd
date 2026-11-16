@@ -236,7 +236,7 @@ static func hex_color(hex: int) -> Color:
 
 func _billboard_shader(code: String, extra: String = "") -> Shader:
 	var sh := Shader.new()
-	sh.code = code.replace("#BILLBOARD#", BILLBOARD.replace("#EXTRA#", extra))
+	sh.code = Materials.instance_shader_code(code.replace("#BILLBOARD#", BILLBOARD.replace("#EXTRA#", extra)))
 	return sh
 
 
@@ -256,11 +256,11 @@ func glare_material(kind: int, fog: bool, priority: int = 0) -> ShaderMaterial:
 func make_glare(kind: int, fog: bool, tint: Color, opacity: float, size: float, priority: int = 0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _quad
-	mi.material_override = glare_material(kind, fog, priority)
+	mi.material_override = Materials.material_for_instance(glare_material(kind, fog, priority))
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.scale = Vector3(size, size, size)
-	mi.set_instance_shader_parameter("tint", tint)
-	mi.set_instance_shader_parameter("opacity", opacity)
+	Materials.set_instance_parameter(mi, "tint", tint)
+	Materials.set_instance_parameter(mi, "opacity", opacity)
 	return mi
 
 
@@ -374,8 +374,8 @@ func update_lighting(t: float, delta: float, player_pos: Vector3) -> void:
 			var cs := lamp.core_size * (0.85 + 0.3 * f)
 			lamp.halo.scale = Vector3(hs, hs, 1)
 			lamp.core.scale = Vector3(cs, cs, 1)
-			lamp.halo.set_instance_shader_parameter("opacity", fade * minf(1.0, 0.45 + 0.5 * f) * lamp.brightness)
-			lamp.core.set_instance_shader_parameter("opacity", fade * minf(1.0, 0.5 + 0.5 * f))
+			Materials.set_instance_parameter(lamp.halo, "opacity", fade * minf(1.0, 0.45 + 0.5 * f) * lamp.brightness)
+			Materials.set_instance_parameter(lamp.core, "opacity", fade * minf(1.0, 0.5 + 0.5 * f))
 
 	_light_refresh_timer += delta
 	if _light_refresh_timer >= LIGHT_REFRESH_INTERVAL:

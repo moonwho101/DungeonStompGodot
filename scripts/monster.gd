@@ -221,7 +221,7 @@ func _create_health_bar() -> void:
 	if _bar_material == null:
 		_bar_material = ShaderMaterial.new()
 		var sh := Shader.new()
-		sh.code = HEALTH_BAR_SHADER
+		sh.code = Materials.instance_shader_code(HEALTH_BAR_SHADER)
 		_bar_material.shader = sh
 		_bar_quad = QuadMesh.new()
 		_bar_quad.size = Vector2(1, 1)
@@ -231,7 +231,7 @@ func _create_health_bar() -> void:
 	hp_bar = Node3D.new()
 	_hp_quad = MeshInstance3D.new()
 	_hp_quad.mesh = _bar_quad
-	_hp_quad.material_override = _bar_material
+	_hp_quad.material_override = Materials.material_for_instance(_bar_material)
 	_hp_quad.scale = Vector3(80, 20, 1)
 	_hp_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	hp_bar.add_child(_hp_quad)
@@ -270,8 +270,8 @@ func update_health_bar() -> void:
 		fill = Color(0xef / 255.0, 0x44 / 255.0, 0x44 / 255.0)
 	elif pct < 0.55:
 		fill = Color(0xea / 255.0, 0xb3 / 255.0, 0x08 / 255.0)
-	_hp_quad.set_instance_shader_parameter("pct", pct)
-	_hp_quad.set_instance_shader_parameter("fill_color", fill)
+	Materials.set_instance_parameter(_hp_quad, "pct", pct)
+	Materials.set_instance_parameter(_hp_quad, "fill_color", fill)
 	_hp_text.text = "%d / %d" % [int(hp), int(max_hp)]
 
 

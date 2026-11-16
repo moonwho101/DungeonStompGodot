@@ -111,12 +111,23 @@ cp -r Assets bin Sounds Midi build/windows/
 
 The `dungeonstomp` Android preset needs no extra copy step. The [data_export](addons/data_export/plugin.gd) editor plugin (enabled in `project.godot`) packs `Assets/`, `bin/`, `Sounds/` and `Midi/` into the `.pck` during Android exports, and `DataPaths` reads them from `res://`. The plugin is required because those folders carry `.gdignore`, which hides them from the normal exporter.
 
+For Quest 3, use **Mobile** (Vulkan) or **Compatibility** (`gl_compatibility`, OpenGL ES). When switching, also set **Rendering > Renderer > Rendering Method.mobile** to the desired renderer: the mobile platform override can otherwise keep an Android export on Mobile.
+
+The shared materials use a custom per-pixel Lambert light function to preserve falloff in the game's large world units; Godot's built-in Mobile Lambert path cuts off small FP16 attenuation values before multiplying by light energy. Compatibility uses unique materials for lamp glare, MD2 poses, and health bars instead of exhausting GLES's hardware-limited per-instance uniform buffer. Meshes, shaders, and textures remain shared. Do not enable **Force Vertex Shading**, which bypasses custom light functions.
+
 ### Running Automated Headless Tests
 
 Run the headless test suite to verify parsers, collision math, model loaders, and dungeon generation:
 
 ```bash
 godot --headless --path . -s res://tests/test_runner.gd
+```
+
+Lighting regression tests need a real GPU renderer (not `--headless`). They measure point-light falloff against the intended curve:
+
+```bash
+godot --xr-mode off --path . --rendering-method mobile -s res://tests/test_lighting.gd
+godot --xr-mode off --path . --rendering-method gl_compatibility -s res://tests/test_lighting.gd
 ```
 
 ---

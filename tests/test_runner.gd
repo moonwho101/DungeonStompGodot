@@ -96,11 +96,16 @@ func _xr_tests(models: Parsers.ModelListParser) -> void:
 	var rig := XRRig.new()
 	rig.weapon_anchor = Node3D.new()
 	var mesh := axe.create_instance(axe_def.texture_alias)
-	mesh.set_instance_shader_parameter("frames", Vector4(7, 8, 0, 0))
-	mesh.set_instance_shader_parameter("weights", Vector4(0.5, 0.5, 0, 0))
+	Materials.set_instance_parameter(mesh, "frames", Vector4(7, 8, 0, 0))
+	Materials.set_instance_parameter(mesh, "weights", Vector4(0.5, 0.5, 0, 0))
 	rig.attach_weapon(mesh, axe, axe_def.name, axe_def.scale)
-	check(mesh.get_instance_shader_parameter("frames") == Vector4.ZERO
-		and mesh.get_instance_shader_parameter("weights") == Vector4(1, 0, 0, 0), "XR weapon is held in fixed frame-0 pose")
+	check(_instance_parameter(mesh, "frames") == Vector4.ZERO
+		and _instance_parameter(mesh, "weights") == Vector4(1, 0, 0, 0), "XR weapon is held in fixed frame-0 pose")
+	var other := axe.create_instance(axe_def.texture_alias)
+	axe.set_pose(other, [7], [1.0])
+	check(_instance_parameter(other, "frames") == Vector4(7, 0, 0, 0)
+		and _instance_parameter(mesh, "frames") == Vector4.ZERO, "MD2 instances keep independent poses")
+	other.free()
 	check(mesh.get_parent() == rig.weapon_anchor, "XR weapon parented to the controller anchor")
 	rig.weapon_anchor.free()
 	rig.free()
@@ -136,6 +141,12 @@ func _xr_tests(models: Parsers.ModelListParser) -> void:
 
 	var merged := XRRig.merge_input({"move_x": 0.5, "jump": false}, {"move_x": 0.8, "jump": true, "turn": 0.3})
 	check(is_equal_approx(merged.move_x, 1.0) and merged.jump and is_equal_approx(merged.turn, 0.3), "gamepad and XR input merge")
+
+
+func _instance_parameter(instance: GeometryInstance3D, parameter: StringName) -> Variant:
+	if Materials.uses_material_uniforms():
+		return (instance.material_override as ShaderMaterial).get_shader_parameter(parameter)
+	return instance.get_instance_shader_parameter(parameter)
 
 
 # Hand path (relative to the head) moving `meters` along X over `seconds` with an eased (sine) speed profile,
