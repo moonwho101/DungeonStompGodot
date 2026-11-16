@@ -207,13 +207,13 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		and monster.bbox.is_empty(), "fallen corpse is recovered without resurrection")
 
 	var melee := _test_monster(game, model, "GOBLIN")
-	for height in [300.0, -300.0, 0.0]:
-		game.target = Vector3(80, 100 + height, 0)
+	for height in [300.0, -300.0, 70.0, 0.0]:
+		game.target = Vector3(0 if height == 70.0 else 80, 100 + height, 0)
 		melee.set_state(Monster.State.CHASE)
 		melee.update(0.0, game.target)
 		check((melee.state == Monster.State.ATTACK) == (height == 0.0),
 			"melee attack entry respects vertical range (height %.0f)" % height)
-	for height in [136.0, -136.0, 135.0, -135.0, 0.0]:
+	for height in [65.0, -65.0, 64.0, -64.0, 0.0]:
 		game.target = Vector3(0, 100 + height, 0)
 		melee.set_state(Monster.State.CHASE)
 		melee.set_state(Monster.State.ATTACK)
@@ -221,8 +221,20 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		melee.anim_timer = 0.4
 		game.damage = 0.0
 		melee.update(0.0, game.target)
-		check((game.damage > 0.0) == (absf(height) <= 135.0),
+		check((game.damage > 0.0) == (absf(height) <= Monster.MELEE_VERTICAL_REACH),
 			"melee impact rechecks height after windup (height %.0f)" % height)
+	var walled := MonsterTestGame.new()
+	walled.collision.add_triangle(Vector3(50, -200, -200), Vector3(50, 400, -200), Vector3(50, 400, 200))
+	walled.collision.add_triangle(Vector3(50, -200, -200), Vector3(50, 400, 200), Vector3(50, -200, 200))
+	walled.collision.build_grid()
+	walled.target = Vector3(100, 100, 0)
+	var blocked := _test_monster(walled, model, "GOBLIN")
+	blocked.set_state(Monster.State.ATTACK)
+	blocked.set_animation(Monster.ANIMS.ATTACK, true)
+	blocked.anim_timer = 0.4
+	blocked.update(0.0, walled.target)
+	check(walled.damage == 0.0, "melee impact needs line of sight to the player")
+	walled.world_root.free()
 
 	var caster := _test_monster(game, model, "SORCERER")
 	for height in [651.0, -651.0, 0.0]:

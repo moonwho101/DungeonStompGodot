@@ -4,6 +4,11 @@ extends RefCounted
 
 enum State { IDLE, ALERT, CHASE, ATTACK, HURT, DEATH }
 
+const MELEE_REACH := 135.0
+# Max feet-to-feet height difference for a melee swing; keeps monsters from
+# hitting a player standing on a ledge or floor above/below them.
+const MELEE_VERTICAL_REACH := 64.0
+
 const ANIMS := {
 	"STAND": {"name": "STAND", "start": 0, "end": 39, "fps": 9.0, "loop": true},
 	"RUN": {"name": "RUN", "start": 40, "end": 45, "fps": 10.0, "loop": true},
@@ -466,6 +471,8 @@ func update(delta: float, player_pos: Vector3) -> void:
 			los_timer = 0.12 + randf() * 0.06
 			has_los = game.collision.has_line_of_sight(position + Vector3(0, 40, 0), player_pos + Vector3(0, 20, 0))
 		los = has_los
+	var can_attack: bool = attack_dist <= config.attackRange and los \
+		and (config.canCastSpells or _melee_height_ok(player_pos))
 
 	match state:
 		State.IDLE:
@@ -477,13 +484,13 @@ func update(delta: float, player_pos: Vector3) -> void:
 			_smooth_turn(target_angle, dt)
 			if dist > config.deaggroRadius:
 				set_state(State.IDLE)
-			elif attack_dist <= config.attackRange and los:
+			elif can_attack:
 				set_state(State.ATTACK)
 			elif state_timer >= config.alertDuration:
 				set_state(State.CHASE)
 		State.CHASE:
 			_smooth_turn(target_angle, dt)
-			if attack_dist <= config.attackRange and los:
+			if can_attack:
 				if attack_cooldown <= 0.0:
 					set_state(State.ATTACK)
 				elif config.canCastSpells:
@@ -523,7 +530,7 @@ func update(delta: float, player_pos: Vector3) -> void:
 						var ws: String = config.get("weaponSound", "swish4.wav")
 						if dist <= 1200.0:
 							game.audio.play_sound(ws, maxf(0.05, (1.0 - dist / 1200.0) * 0.7))
-						if attack_dist <= 115.0 + 20.0:
+						if _in_melee_reach(player_pos):
 							game.damage_player(config.damage)
 			if anim_complete:
 				attack_cooldown = config.spellCooldown if config.spellCooldown > 0.0 else 0.5
@@ -547,6 +554,18 @@ func _attack_distance_to(player_pos: Vector3) -> float:
 	var player_feet := player_pos - Vector3(0, CollisionWorld.EYE_HEIGHT, 0)
 	var monster_feet := position - Vector3(0, CollisionWorld.MONSTER_FOOT_OFFSET, 0)
 	return monster_feet.distance_to(player_feet)
+
+
+func _melee_height_ok(player_pos: Vector3) -> bool:
+	var player_feet_y := player_pos.y - CollisionWorld.EYE_HEIGHT
+	var monster_feet_y := position.y - CollisionWorld.MONSTER_FOOT_OFFSET
+	return absf(player_feet_y - monster_feet_y) <= MELEE_VERTICAL_REACH
+
+
+func _in_melee_reach(player_pos: Vector3) -> bool:
+	if _attack_distance_to(player_pos) > MELEE_REACH or not _melee_height_ok(player_pos):
+		return false
+	return game.collision.has_line_of_sight(position + Vector3(0, 40, 0), player_pos + Vector3(0, -40, 0))
 
 
 func _recover_if_fallen() -> bool:
@@ -629,7 +648,7 @@ func set_state(new_state: int) -> void:
 	if new_state == State.ATTACK:
 		has_dealt_damage = false
 		var d := _attack_distance_to(player_pos)
-		if config.canCastSpells and d <= 115.0:
+		if config.canCastSpells and d <= 115.0 and _melee_height_ok(player_pos):
 			is_melee_attack = true
 			pending_spell = ""
 		elif config.canCastSpells and not config.spells.is_empty():
