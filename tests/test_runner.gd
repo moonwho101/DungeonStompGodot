@@ -307,11 +307,24 @@ func _monster_gesture_tests(model: MD2Model) -> void:
 				m.set_animation(Monster.ANIMS.RUN, true)
 		check(gestures >= 65 and gestures <= 135, "roughly 5%% of eligible seconds start a gesture at %d FPS (%d/2000)" % [fps, gestures])
 	check(seen.size() == 5, "all five monster gestures are reachable")
+	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(0, 0, 500), Vector3(500, 0, -500))
+	game.collision.build_grid()
 	game.target = Vector3(0, 100, 400)
 	m.set_state(Monster.State.CHASE)
+	for gesture: String in Monster.GESTURES:
+		m.gesture_timer = 1.0
+		m.set_animation(Monster.ANIMS[gesture], true)
+		var start := Vector2(m.position.x, m.position.z)
+		var held := true
+		for i in 45:
+			if m.anim_complete:
+				break
+			m.update(0.05, game.target)
+			held = held and Vector2(m.position.x, m.position.z).is_equal_approx(start)
+		check(held and m.anim_complete, "monster stays in place for the whole " + gesture)
+		m.update(0.05, game.target)
+		check(m.current_anim.name == "RUN" and m.position.z > start.y, "pursuit resumes after " + gesture)
 	m.set_animation(Monster.ANIMS.WAVE, true)
-	m.update(0.05, game.target)
-	check(m.current_anim.name == "WAVE" and m.position.z > 0.0, "a chasing monster keeps moving through its wave")
 	game.target = m.position + Vector3(0, 50, 60)
 	m.update(0.0, game.target)
 	m.update(0.0, game.target)

@@ -9,7 +9,7 @@ const MELEE_REACH := 135.0
 # hitting a player standing on a ledge or floor above/below them.
 const MELEE_VERTICAL_REACH := 64.0
 const GESTURES := ["FLIP", "SALUTE", "TAUNT", "WAVE", "POINT"]
-const GESTURE_CHANCE := 0.05
+const GESTURE_CHANCE := 0.20
 
 const ANIMS := {
 	"STAND": {"name": "STAND", "start": 0, "end": 39, "fps": 9.0, "loop": true},
@@ -409,9 +409,10 @@ func _tick_ambient_noise(dt: float, dist: float) -> void:
 		_play_noise(dist)
 
 
-func _active_animation(locomotion: Dictionary, dt: float, dist: float) -> void:
+## Returns true when the monster is using its locomotion animation rather than gesturing.
+func _active_animation(locomotion: Dictionary, dt: float, dist: float) -> bool:
 	if not current_anim.loop and current_anim.name in GESTURES and not anim_complete:
-		return
+		return false
 	gesture_timer -= dt
 	if gesture_timer <= 0.0:
 		gesture_timer += 1.0
@@ -422,8 +423,9 @@ func _active_animation(locomotion: Dictionary, dt: float, dist: float) -> void:
 				if randf() < 0.5:
 					_play_noise(dist)
 					noise_timer = randf_range(5.0, 15.0)
-				return
+				return false
 	set_animation(locomotion)
+	return true
 
 
 func _resolve(with_others: bool, player_pos: Vector3) -> void:
@@ -519,14 +521,13 @@ func update(delta: float, player_pos: Vector3) -> void:
 				if attack_cooldown <= 0.0:
 					set_state(State.ATTACK)
 				elif config.canCastSpells:
-					_active_animation(ANIMS.RUN, dt, dist)
-					_tactical_movement(dt, dist, player_pos)
+					if _active_animation(ANIMS.RUN, dt, dist):
+						_tactical_movement(dt, dist, player_pos)
 				else:
 					_active_animation(ANIMS.STAND, dt, dist)
 			elif dist > config.deaggroRadius:
 				set_state(State.IDLE)
-			else:
-				_active_animation(ANIMS.RUN, dt, dist)
+			elif _active_animation(ANIMS.RUN, dt, dist):
 				if dist > config.stopDistance:
 					_move_forward(dt, player_pos)
 				elif config.canCastSpells:
