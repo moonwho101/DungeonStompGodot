@@ -8,6 +8,8 @@ const MELEE_REACH := 135.0
 # Max feet-to-feet height difference for a melee swing; keeps monsters from
 # hitting a player standing on a ledge or floor above/below them.
 const MELEE_VERTICAL_REACH := 64.0
+const GESTURES := ["FLIP", "SALUTE", "TAUNT", "WAVE", "POINT"]
+const GESTURE_CHANCE := 0.05
 
 const ANIMS := {
 	"STAND": {"name": "STAND", "start": 0, "end": 39, "fps": 9.0, "loop": true},
@@ -32,11 +34,12 @@ const DEFAULT_CONFIG := {
 	"attackRange": 85.0, "stopDistance": 85.0, "alertDuration": 0.6, "damage": 10, "maxHealth": 100,
 	"painSound": "impact.wav", "deathSound": "die.wav", "weaponSound": "swish4.wav",
 	"yellSound": "goblin.wav", "sound": "goblin.wav",
-	"canCastSpells": false, "spells": [], "spellCooldown": 0.0, "bloodColor": 0x9a0a0a,
+	"canCastSpells": false, "spells": [], "spellLevel": "basic", "spellCooldown": 0.0, "bloodColor": 0x9a0a0a,
 }
 
 const SPEED_MULT := 1.5
 const SPELLS := ["MAGIC MISSILE", "FIREBALL", "LIGHTNING"]
+const SPELL_RECOVERY_SCALE := {"basic": 1.0, "heavy": 0.5, "savage": 0.125}
 
 static var CONFIGS := {
 	"KNIGHT": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 150.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 15, "maxHealth": 20},
@@ -145,6 +148,7 @@ var fade_duration := 0.15
 var bbox := CollisionWorld.Box.new()
 var health_bar_height := 75.0
 var noise_timer := 0.0
+var gesture_timer := randf() # Stagger the once-per-second rolls across active monsters.
 var los_timer := 0.0
 var has_los := false
 var pending_spell := ""
@@ -179,6 +183,11 @@ static func get_config(model_name: String) -> Dictionary:
 				break
 	if key != "":
 		cfg.merge(CONFIGS[key], true)
+		match key:
+			"WRAITH", "SORCERER", "FULIMO":
+				cfg.spellLevel = "heavy"
+			"NECROMANCER", "DEMONESS":
+				cfg.spellLevel = "savage"
 	return cfg
 
 
@@ -400,6 +409,23 @@ func _tick_ambient_noise(dt: float, dist: float) -> void:
 		_play_noise(dist)
 
 
+func _active_animation(locomotion: Dictionary, dt: float, dist: float) -> void:
+	if not current_anim.loop and current_anim.name in GESTURES and not anim_complete:
+		return
+	gesture_timer -= dt
+	if gesture_timer <= 0.0:
+		gesture_timer += 1.0
+		if randf() < GESTURE_CHANCE:
+			var gesture: Dictionary = ANIMS[GESTURES.pick_random()]
+			if gesture.end < model.frame_count:
+				set_animation(gesture, current_anim.name == gesture.name)
+				if randf() < 0.5:
+					_play_noise(dist)
+					noise_timer = randf_range(5.0, 15.0)
+				return
+	set_animation(locomotion)
+
+
 func _resolve(with_others: bool, player_pos: Vector3) -> void:
 	var cw: CollisionWorld = game.collision
 	is_grounded = cw.resolve_capsule_world(position, CollisionWorld.MONSTER_FOOT_OFFSET, CollisionWorld.MONSTER_CAPSULE_RADIUS,
@@ -478,7 +504,6 @@ func update(delta: float, player_pos: Vector3) -> void:
 			if dist <= config.aggroRadius:
 				set_state(State.ALERT)
 		State.ALERT:
-			set_animation(ANIMS.STAND)
 			_smooth_turn(target_angle, dt)
 			if dist > config.deaggroRadius:
 				set_state(State.IDLE)
@@ -486,20 +511,22 @@ func update(delta: float, player_pos: Vector3) -> void:
 				set_state(State.ATTACK)
 			elif state_timer >= config.alertDuration:
 				set_state(State.CHASE)
+			else:
+				_active_animation(ANIMS.STAND, dt, dist)
 		State.CHASE:
 			_smooth_turn(target_angle, dt)
 			if can_attack:
 				if attack_cooldown <= 0.0:
 					set_state(State.ATTACK)
 				elif config.canCastSpells:
-					set_animation(ANIMS.RUN)
+					_active_animation(ANIMS.RUN, dt, dist)
 					_tactical_movement(dt, dist, player_pos)
 				else:
-					set_animation(ANIMS.STAND)
+					_active_animation(ANIMS.STAND, dt, dist)
 			elif dist > config.deaggroRadius:
 				set_state(State.IDLE)
 			else:
-				set_animation(ANIMS.RUN)
+				_active_animation(ANIMS.RUN, dt, dist)
 				if dist > config.stopDistance:
 					_move_forward(dt, player_pos)
 				elif config.canCastSpells:
@@ -532,6 +559,8 @@ func update(delta: float, player_pos: Vector3) -> void:
 							game.damage_player(config.damage)
 			if anim_complete:
 				attack_cooldown = config.spellCooldown if config.spellCooldown > 0.0 else 0.5
+				if not is_melee_attack:
+					attack_cooldown *= float(SPELL_RECOVERY_SCALE[config.spellLevel])
 				has_dealt_damage = false
 				pending_spell = ""
 				set_state(State.CHASE if dist <= config.deaggroRadius else State.IDLE)
@@ -641,6 +670,8 @@ func set_state(new_state: int) -> void:
 	dead = new_state == State.DEATH
 	state_timer = 0.0
 	var player_pos: Vector3 = game.player_position()
+	if new_state == State.IDLE and current_anim.name in GESTURES:
+		set_animation(ANIMS.STAND)
 	if new_state == State.ATTACK:
 		has_dealt_damage = false
 		var d := _attack_distance_to(player_pos)

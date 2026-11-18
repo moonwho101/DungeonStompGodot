@@ -73,6 +73,8 @@ func _run_tests() -> void:
 	check(md2 != null and md2.frame_count >= 198, "goblin.md2 loads with all frames")
 	_fall_and_attack_tests(md2)
 	_monster_movement_tests(md2)
+	_spell_cadence_test(md2)
+	_monster_gesture_tests(md2)
 	var chest := TDSModel.load_for_def(models.get_model_by_name("cdoorclosedchest"))
 	check(chest != null and chest.has_geometry, "chest .3ds loads")
 
@@ -276,6 +278,58 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		caster.update(0.0, game.target)
 		check((game.shots == 1) == (height == 0.0),
 			"spell release rechecks height after windup (height %.0f)" % height)
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _monster_gesture_tests(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	var m := _test_monster(game, model, "GOBLIN")
+	var seen := {}
+	var gestures := 0
+	seed(8123)
+	# Count starts over eligible time, not frames, at two different refresh rates.
+	for fps in [30, 90]:
+		m.gesture_timer = 1.0
+		gestures = 0
+		for i in 2000 * fps:
+			m._active_animation(Monster.ANIMS.RUN, 1.0 / fps, 300.0)
+			if not m.current_anim.loop:
+				seen[m.current_anim.name] = true
+				gestures += 1
+				m.set_animation(Monster.ANIMS.RUN, true)
+		check(gestures >= 65 and gestures <= 135, "roughly 5%% of eligible seconds start a gesture at %d FPS (%d/2000)" % [fps, gestures])
+	check(seen.size() == 5, "all five monster gestures are reachable")
+	game.target = Vector3(0, 100, 400)
+	m.set_state(Monster.State.CHASE)
+	m.set_animation(Monster.ANIMS.WAVE, true)
+	m.update(0.05, game.target)
+	check(m.current_anim.name == "WAVE" and m.position.z > 0.0, "a chasing monster keeps moving through its wave")
+	game.target = m.position + Vector3(0, 50, 60)
+	m.update(0.0, game.target)
+	m.update(0.0, game.target)
+	check(m.state == Monster.State.ATTACK and m.current_anim.name == "ATTACK", "attacking interrupts an unfinished wave")
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _spell_cadence_test(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	game.target = Vector3(0, 100, 400)
+	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(0, 0, 500), Vector3(500, 0, -500))
+	game.collision.build_grid()
+	var shots: Array[int] = []
+	# All three families have the same base cooldown. Count actual releases at a fixed range.
+	for family in ["OKTA", "WRAITH", "NECROMANCER"]:
+		var m := _test_monster(game, model, family)
+		m.config.moveSpeed = 0.0
+		m.set_state(Monster.State.CHASE)
+		game.shots = 0
+		for i in 60 * 30:
+			m.update(1.0 / 60.0, game.target)
+		shots.append(game.shots)
+	check(shots[0] == 12 and shots[1] >= shots[0] * 1.4 and shots[2] >= shots[0] * 2.0,
+		"30-second ranged casts: basic %d, heavy %d, savage %d" % shots)
 	game.world_root.free()
 	Monster.clear_shared()
 
