@@ -755,7 +755,7 @@ func _build_menu(root: Control) -> void:
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main.add_child(_status)
 	if game != null and game.xr_rig != null:
-		main.add_child(_help("🥽 L-Stick = Move (Click to Sprint)   ·   R-Stick = Turn   ·   Swing Weapon = Melee Attack   ·   Trigger = Cast Spell / Select   ·   A = Jump   ·   B = Open Door/Chest / Back   ·   X/Y = Weapon   ·   ☰ Menu = Menu"))
+		main.add_child(_help("🥽 L-Stick = Move (Click to Sprint)   ·   R-Stick = Turn   ·   Swing Weapon = Melee Attack   ·R-Trigger = Cast Spell / Select   ·   A = Jump   ·   B = Open Door/Chest / Back   ·   X/Y = Weapon   ·   L-Trigger / ☰ Menu = Menu"))
 	else:
 		main.add_child(_help("⌨️ WASD = Move   ·   Mouse = Look   ·   Left Click = Attack / Cast   ·   Shift = Sprint   ·   Space = Jump   ·   E = Open Door/Chest   ·   Q/Z = Weapon   ·   F = Fly   ·   G = Regen Dungeon   ·   H = HUD   ·   Esc = Menu"))
 		main.add_child(_help("🎮 L-Stick = Move (L3 Sprint)   ·   R-Stick = Look (R3 Level)   ·   RT = Attack / Cast   ·   X = Open Door/Chest   ·   A = Jump / Confirm   ·   LB/RB = Weapon   ·   LT = Sprint   ·   Start = Menu"))
