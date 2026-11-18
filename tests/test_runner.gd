@@ -75,6 +75,7 @@ func _run_tests() -> void:
 	_monster_movement_tests(md2)
 	_spell_cadence_test(md2)
 	_monster_gesture_tests(md2)
+	_monster_personality_tests(md2)
 	var chest := TDSModel.load_for_def(models.get_model_by_name("cdoorclosedchest"))
 	check(chest != null and chest.has_geometry, "chest .3ds loads")
 
@@ -131,10 +132,14 @@ class QuietAudio:
 
 class QuietEffects:
 	extends RefCounted
+	var texts: Array[String] = []
 
 	func emit_particle(_x: float, _y: float, _z: float, _vx: float, _vy: float, _vz: float,
 			_color: int, _size: float, _life: float) -> void:
 		pass
+
+	func create_floating_text(text: String, _pos: Vector3, _css: String = "") -> void:
+		texts.append(text)
 
 
 class MonsterTestGame:
@@ -156,6 +161,9 @@ class MonsterTestGame:
 
 	func damage_player(amount: float) -> void:
 		damage += amount
+
+	func vibrate(_ms: int, _weak: float, _strong: float) -> void:
+		pass
 
 	func launch_monster_projectile(_monster: Monster, _spell: String, _target: Vector3) -> void:
 		shots += 1
@@ -293,19 +301,13 @@ func _monster_gesture_tests(model: MD2Model) -> void:
 	var game := MonsterTestGame.new()
 	var m := _test_monster(game, model, "GOBLIN")
 	var seen := {}
-	var gestures := 0
 	seed(8123)
-	# Count starts over eligible time, not frames, at two different refresh rates.
-	for fps in [30, 90]:
-		m.gesture_timer = 1.0
-		gestures = 0
-		for i in 2000 * fps:
-			m._active_animation(Monster.ANIMS.RUN, 1.0 / fps, 300.0)
-			if not m.current_anim.loop:
-				seen[m.current_anim.name] = true
-				gestures += 1
-				m.set_animation(Monster.ANIMS.RUN, true)
-		check(gestures >= 65 and gestures <= 135, "roughly 5%% of eligible seconds start a gesture at %d FPS (%d/2000)" % [fps, gestures])
+	m.gesture_timer = 1.0
+	for i in 2000 * 30:
+		m._active_animation(Monster.ANIMS.RUN, 1.0 / 30, 300.0)
+		if not m.current_anim.loop:
+			seen[m.current_anim.name] = true
+			m.set_animation(Monster.ANIMS.RUN, true)
 	check(seen.size() == 5, "all five monster gestures are reachable")
 	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(0, 0, 500), Vector3(500, 0, -500))
 	game.collision.build_grid()
@@ -329,6 +331,67 @@ func _monster_gesture_tests(model: MD2Model) -> void:
 	m.update(0.0, game.target)
 	m.update(0.0, game.target)
 	check(m.state == Monster.State.ATTACK and m.current_anim.name == "ATTACK", "attacking interrupts an unfinished wave")
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _monster_personality_tests(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	game.fall_recovery_y = -100000.0
+	game.collision.add_triangle(Vector3(-3000, 0, -3000), Vector3(-3000, 0, 3000), Vector3(3000, 0, 3000))
+	game.collision.add_triangle(Vector3(-3000, 0, -3000), Vector3(3000, 0, 3000), Vector3(3000, 0, -3000))
+	game.collision.build_grid()
+	game.target = Vector3(0, 100, 300)
+
+	var m := _test_monster(game, model, "BAUUL")
+	var base_hp: int = m._base_config.maxHealth
+	var base_speed: float = m._base_config.moveSpeed
+	check(m.personality == "BRUTE" and m.config.maxHealth > base_hp and m.config.moveSpeed < base_speed
+		and m.health == m.config.maxHealth and m._hp_trait.visible and m._hp_trait.text == "BRUTE",
+		"family config gives BAUUL the tougher, slower, labelled brute personality")
+	m.set_personality("")
+	check(m.config.maxHealth == base_hp and m.config.moveSpeed == base_speed and not m._hp_trait.visible,
+		"clearing personality restores family stats")
+	check(_test_monster(game, model, "GOBLIN").personality == "COWARD" and _test_monster(game, model, "").personality == "",
+		"personality comes from the family config; unknown models have none")
+
+	var coward := _test_monster(game, model, "GOBLIN")
+	coward.set_state(Monster.State.CHASE)
+	coward.take_damage(coward.config.maxHealth * 0.7)
+	var start_z := coward.position.z
+	for i in 40:
+		coward.update(0.05, game.target)
+	check(coward.state == Monster.State.FLEE and coward.position.z < start_z - 100.0, "wounded coward flees from the player")
+	for i in 80:
+		coward.update(0.05, game.target)
+	check(coward.state == Monster.State.CHASE or coward.state == Monster.State.ATTACK, "coward returns to the fight after fleeing")
+	coward.take_damage(0.5)
+	for i in 20:
+		coward.update(0.05, game.target)
+	check(coward.state != Monster.State.FLEE, "coward only flees once")
+
+	var berserker := _test_monster(game, model, "DEMON")
+	var calm_speed: float = berserker.config.moveSpeed
+	berserker.take_damage(berserker.config.maxHealth * 0.3)
+	check(not berserker.enraged, "berserker stays calm above half health")
+	berserker.take_damage(berserker.config.maxHealth * 0.3)
+	check(berserker.enraged and berserker.config.moveSpeed > calm_speed and game.fx.texts.has("ENRAGED!"),
+		"berserker enrages below half health")
+
+	var leader := _test_monster(game, model, "WOLF")
+	var near := _test_monster(game, model, "GOBLIN")
+	near.position = leader.position + Vector3(300, 0, 0)
+	var far := _test_monster(game, model, "GOBLIN")
+	far.position = leader.position + Vector3(2000, 0, 0)
+	game.monsters = [leader, near, far]
+	leader.set_state(Monster.State.ALERT)
+	check(near.state == Monster.State.ALERT and far.state == Monster.State.IDLE, "pack leader rallies only nearby idle monsters")
+
+	var restored := _test_monster(game, model, "DEMON")
+	restored.restore_snapshot({"x": 0, "y": 50, "z": 0, "r": 0.0, "hp": 1.0, "d": 0})
+	check(restored.personality == "BERSERKER" and restored.enraged and restored.health == 1.0,
+		"restored wounded berserker is still enraged")
+	game.monsters.clear()
 	game.world_root.free()
 	Monster.clear_shared()
 

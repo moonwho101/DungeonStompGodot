@@ -167,9 +167,9 @@ func _draw() -> void:
 	_dots(game.active_pickups, 2.5 * dot, sc, center, Color("#38bdf8"),
 		func(p): return p.state == "ACTIVE" and p.def.get("type", "") != "health")
 	_dots(game.monsters, 3.5 * dot, sc, center, Color("#f87171"),
-		func(m): return not m.dead and m.state != Monster.State.CHASE and m.state != Monster.State.ATTACK)
+		func(m): return not m.dead and m.state != Monster.State.CHASE and m.state != Monster.State.ATTACK and m.state != Monster.State.FLEE)
 	_dots(game.monsters, 4.0 * dot, sc, center, Color("#ef4444"),
-		func(m): return m.state == Monster.State.CHASE or m.state == Monster.State.ATTACK)
+		func(m): return m.state == Monster.State.CHASE or m.state == Monster.State.ATTACK or m.state == Monster.State.FLEE)
 
 	# Player marker and view cone. Canvas angle: +X right (0 rad), +Z down (PI/2 rad).
 	var cos_pitch := cos(_pitch)

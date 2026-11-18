@@ -43,6 +43,17 @@ Monster pursuit and strafing use collision-checked movement steps no larger than
 - 🧟 **30 Monster Families:** Ogres, hydras, dragons, necromancers, demonesses, faeries, mummies, wraiths, goblins, skeletons, wolves, tentacle horrors, and more. Features state-machine AI with patrol, pursuit, melee attacks, and ranged spellcasting.
   Once alerted, standing or running monsters have a 5% chance per eligible second to flip, salute, taunt, wave, or point. Monsters pause their pursuit or strafing to gesture in place, sometimes with a call, then resume moving. Attacks can still interrupt a gesture.
   To tune a spellcaster, edit `spellLevel` in its `CONFIGS` entry in [monster.gd](scripts/monster.gd). Use `basic` for the original recovery after a ranged cast, `heavy` for half that recovery, or `savage` for one eighth. Spell windup and damage stay the same. Melee-only monsters do not gain spells.
+- 🎭 **Monster Personalities:** Each monster family has its own personality, set by the `personality` key in its `CONFIGS` entry in [monster.gd](scripts/monster.gd). The personality is shown in color above the health bar and changes stats, XP, and behavior. Monsters may shout a line in character when they spot you:
+  - **Brute** (Bauul, Ogre, Dragon): more health and damage, but slower.
+  - **Berserker** (Tentacle, Ogro, Insect, Demon, Craz): becomes enraged below half health, moving faster, hitting harder, and attacking more often.
+  - **Coward** (Goblin, Slave, Imp): runs away once when badly hurt, then returns to fight.
+  - **Cunning** (Sorcerer, Wraith, Faerie, Okta): melee monsters zig-zag toward you; spellcasters only gain damage and XP.
+  - **Show-off** (Phantom, Demoness, Fulimo, Sorb): gestures and taunts much more often.
+  - **Pack Leader** (Skeleton, Wolf, Necromancer, Rider): alerts idle monsters nearby.
+  - **Drowsy** (Corpse, Oluve, Mummy): notices you late and moves slowly.
+  - **Vigilant** (Knight, Hydra, Cobra, Centaur): notices you from farther away.
+
+  To tune a personality's stats and lines, edit `PERSONALITIES` in [monster.gd](scripts/monster.gd).
 - 💡 **Godot Forward+ 3D Rendering:** Dynamic lighting with flickering lamp glare, normal map support (`ds_normal_maps` shader global), particle effects for blood splatters and spell bursts, and atmospheric distance fog.
 - 🧭 **Retro HUD & Radar Minimap:** Follow the blue arrow on the rim toward the exit portal. When you get close, it becomes a pulsing blue target at the portal's map location. Both appear above walls, loot, enemies, and the player marker.
 - 💾 **Persistent Adventure State:** Automatically saves run progress to `user://` — slain monsters, looted chests, unlocked doors, and player stats persist across sessions and depth transitions.

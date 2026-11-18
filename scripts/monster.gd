@@ -2,7 +2,7 @@
 class_name Monster
 extends RefCounted
 
-enum State { IDLE, ALERT, CHASE, ATTACK, HURT, DEATH }
+enum State { IDLE, ALERT, CHASE, ATTACK, HURT, DEATH, FLEE }
 
 const MELEE_REACH := 135.0
 # Max feet-to-feet height difference for a melee swing; keeps monsters from
@@ -37,41 +37,67 @@ const DEFAULT_CONFIG := {
 	"canCastSpells": false, "spells": [], "spellLevel": "basic", "spellCooldown": 0.0, "bloodColor": 0x9a0a0a,
 }
 
+# Personalities layered on top of a family's config (set by its "personality" key in CONFIGS).
+# Stat keys are multipliers; behaviour is keyed off the personality id in the AI below.
+const PERSONALITIES := {
+	"BRUTE": {"title": "Brute", "color": "#f97316", "health": 1.6, "damage": 1.3, "speed": 0.8, "xp": 1.5,
+		"barks": ["SMASH!", "You look breakable.", "Me crush!"]},
+	"BERSERKER": {"title": "Berserker", "color": "#ef4444", "health": 0.85, "damage": 1.2, "speed": 1.1, "xp": 1.3,
+		"barks": ["BLOOD!", "No mercy!", "RAAAAGH!"]},
+	"COWARD": {"title": "Coward", "color": "#a3e635", "health": 0.9, "speed": 1.05, "xp": 0.8,
+		"barks": ["Uh oh...", "Not the face!", "W-who goes there?"]},
+	"CUNNING": {"title": "Cunning", "color": "#a78bfa", "damage": 1.1, "xp": 1.3,
+		"barks": ["Catch me if you can.", "Heh heh heh...", "Too slow!"]},
+	"SHOWOFF": {"title": "Show-off", "color": "#facc15", "gesture": 2.5, "xp": 1.2,
+		"barks": ["Watch this!", "Behold my moves!", "Am I not magnificent?"]},
+	"PACK_LEADER": {"title": "Pack Leader", "color": "#38bdf8", "health": 1.25, "aggro": 1.2, "xp": 1.5,
+		"barks": ["To me, brothers!", "Intruder! Get it!", "Surround it!"]},
+	"DROWSY": {"title": "Drowsy", "color": "#94a3b8", "speed": 0.85, "aggro": 0.5, "alert": 2.5, "xp": 0.8,
+		"barks": ["*yawn*", "Five more minutes...", "Huh? Wha?"]},
+	"VIGILANT": {"title": "Vigilant", "color": "#22d3ee", "aggro": 1.5, "alert": 0.3, "xp": 1.1,
+		"barks": ["I see you!", "Halt!", "Nobody sneaks past me."]},
+}
+const COWARD_FLEE_HEALTH := 0.4
+const COWARD_FLEE_TIME := 2.5
+const BERSERK_HEALTH := 0.5
+const RALLY_RADIUS := 1000.0
+const BARK_CHANCE := 0.6
+
 const SPEED_MULT := 1.5
 const SPELLS := ["MAGIC MISSILE", "FIREBALL", "LIGHTNING"]
 const SPELL_RECOVERY_SCALE := {"basic": 1.0, "heavy": 0.5, "savage": 0.125}
 
 static var CONFIGS := {
-	"KNIGHT": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 150.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 15, "maxHealth": 20},
-	"GOBLIN": {"painSound": "impact.wav", "deathSound": "death3.wav", "weaponSound": "swish4.wav", "yellSound": "goblin.wav", "sound": "goblin.wav", "moveSpeed": 190.0 * SPEED_MULT, "aggroRadius": 750.0, "damage": 6, "maxHealth": 18},
-	"BAUUL": {"painSound": "baullpain.wav", "deathSound": "baull.wav", "weaponSound": "swish1.wav", "yellSound": "baullspeak.wav", "sound": "baullspeak.wav", "moveSpeed": 140.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 20, "maxHealth": 25, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 620.0, "stopDistance": 270.0, "spellCooldown": 2.0},
-	"CORPSE": {"painSound": "impact.wav", "deathSound": "goblindeath.wav", "weaponSound": "swish9.wav", "yellSound": "ghoul.wav", "sound": "ghoul.wav", "moveSpeed": 110.0 * SPEED_MULT, "aggroRadius": 650.0, "damage": 8, "maxHealth": 15},
-	"SORCERER": {"painSound": "sorcererpain.wav", "deathSound": "sorcererdie.wav", "weaponSound": "swish7.wav", "yellSound": "sorcererspeak.wav", "sound": "sorcererspeak.wav", "moveSpeed": 160.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 18, "maxHealth": 20, "canCastSpells": true, "spellLevel": "heavy", "spells": SPELLS, "attackRange": 650.0, "stopDistance": 260.0, "spellCooldown": 1.6},
-	"TENTACLE": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 120.0 * SPEED_MULT, "aggroRadius": 700.0, "damage": 5, "maxHealth": 17},
-	"WRAITH": {"painSound": "wraithpain.wav", "deathSound": "wraithdie.wav", "weaponSound": "swish4.wav", "yellSound": "wraithspeak.wav", "sound": "wraithspeak.wav", "moveSpeed": 180.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 12, "maxHealth": 28, "canCastSpells": true, "spellLevel": "heavy", "spells": SPELLS, "attackRange": 600.0, "stopDistance": 250.0, "spellCooldown": 1.8},
-	"OGRE": {"painSound": "impact3.wav", "deathSound": "death1.wav", "weaponSound": "swish7.wav", "yellSound": "ogre.wav", "sound": "ogre.wav", "moveSpeed": 130.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 25, "maxHealth": 25, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 550.0, "stopDistance": 220.0, "spellCooldown": 2.2},
-	"PHANTOM": {"painSound": "impact4.wav", "deathSound": "death2.wav", "weaponSound": "swish7.wav", "yellSound": "baull.wav", "sound": "baull.wav", "moveSpeed": 170.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 16, "maxHealth": 20, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 600.0, "stopDistance": 250.0, "spellCooldown": 2.0},
-	"OGRO": {"painSound": "impact3.wav", "deathSound": "death1.wav", "weaponSound": "swish7.wav", "yellSound": "ogre.wav", "sound": "ogre.wav", "moveSpeed": 135.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 14, "maxHealth": 20},
-	"SKELETON2": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 165.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 10, "maxHealth": 15},
-	"DEMONESS": {"painSound": "impact3.wav", "deathSound": "death4.wav", "weaponSound": "swish7.wav", "yellSound": "ogre.wav", "sound": "ogre.wav", "moveSpeed": 175.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 22, "maxHealth": 35, "canCastSpells": true, "spellLevel": "savage", "spells": SPELLS, "attackRange": 680.0, "stopDistance": 280.0, "spellCooldown": 1.6},
-	"FAERIE": {"painSound": "faeriepain.wav", "deathSound": "faeriedie.wav", "weaponSound": "swish7.wav", "yellSound": "faeriespeak.wav", "sound": "faeriespeak.wav", "moveSpeed": 185.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 15, "maxHealth": 30, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 700.0, "stopDistance": 300.0, "spellCooldown": 1.4},
-	"SLAVE": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 140.0 * SPEED_MULT, "aggroRadius": 600.0, "damage": 5, "maxHealth": 5},
-	"WOLF": {"painSound": "wolfpain.wav", "deathSound": "wolfdie.wav", "weaponSound": "swish4.wav", "yellSound": "wolfhowl.wav", "sound": "wolfhowl.wav", "moveSpeed": 210.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 12, "maxHealth": 20},
-	"INSECT": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 195.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 10, "maxHealth": 20},
-	"OLUVE": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 150.0 * SPEED_MULT, "aggroRadius": 700.0, "damage": 6, "maxHealth": 17},
-	"MUMMY": {"painSound": "mummypain.wav", "deathSound": "mummydie.wav", "weaponSound": "swish7.wav", "yellSound": "mummyspeak.wav", "sound": "mummyspeak.wav", "moveSpeed": 125.0 * SPEED_MULT, "aggroRadius": 750.0, "damage": 12, "maxHealth": 18},
-	"HYDRA": {"painSound": "hydrapain.wav", "deathSound": "hydradie.wav", "weaponSound": "swish1.wav", "yellSound": "hydraspeak.wav", "sound": "hydraspeak.wav", "moveSpeed": 145.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 16, "maxHealth": 20},
-	"NECROMANCER": {"painSound": "necropain.wav", "deathSound": "necrodie.wav", "weaponSound": "swish5.wav", "yellSound": "necrospeak.wav", "sound": "necrospeak.wav", "moveSpeed": 160.0 * SPEED_MULT, "aggroRadius": 1000.0, "damage": 24, "maxHealth": 35, "canCastSpells": true, "spellLevel": "savage", "spells": SPELLS, "attackRange": 650.0, "stopDistance": 280.0, "spellCooldown": 1.8},
-	"IMP": {"painSound": "imppain.wav", "deathSound": "impdie.wav", "weaponSound": "swish1.wav", "yellSound": "impspeak.wav", "sound": "impspeak.wav", "moveSpeed": 180.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 10, "maxHealth": 20},
-	"DEMON": {"painSound": "demonpain.wav", "deathSound": "demondie.wav", "weaponSound": "swish7.wav", "yellSound": "demonspeak.wav", "sound": "demonspeak.wav", "moveSpeed": 165.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 20, "maxHealth": 25},
-	"FULIMO": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 170.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 18, "maxHealth": 25, "canCastSpells": true, "spellLevel": "heavy", "spells": SPELLS, "attackRange": 650.0, "stopDistance": 260.0, "spellCooldown": 1.6},
-	"COBRA": {"painSound": "impact.wav", "deathSound": "snakedie.wav", "weaponSound": "swish7.wav", "yellSound": "snakehiss.wav", "sound": "snakehiss.wav", "moveSpeed": 190.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 14, "maxHealth": 30},
-	"DRAGON": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 160.0 * SPEED_MULT, "aggroRadius": 1000.0, "damage": 28, "maxHealth": 30},
-	"CENTAUR": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 190.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 12, "maxHealth": 16},
-	"CRAZ": {"painSound": "impact.wav", "deathSound": "death3.wav", "weaponSound": "swish7.wav", "yellSound": "orc.wav", "sound": "orc.wav", "moveSpeed": 175.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 14, "maxHealth": 20},
-	"RIDER": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 180.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 20, "maxHealth": 26},
-	"OKTA": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 165.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 16, "maxHealth": 25, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 600.0, "stopDistance": 250.0, "spellCooldown": 1.8},
-	"SORB": {"painSound": "impact.wav", "deathSound": "sorbdie.wav", "weaponSound": "swish7.wav", "yellSound": "sorb.wav", "sound": "sorb.wav", "moveSpeed": 170.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 22, "maxHealth": 29, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 620.0, "stopDistance": 260.0, "spellCooldown": 1.8},
+	"KNIGHT": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 150.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 15, "maxHealth": 20, "personality": "VIGILANT"},
+	"GOBLIN": {"painSound": "impact.wav", "deathSound": "death3.wav", "weaponSound": "swish4.wav", "yellSound": "goblin.wav", "sound": "goblin.wav", "moveSpeed": 190.0 * SPEED_MULT, "aggroRadius": 750.0, "damage": 6, "maxHealth": 18, "personality": "COWARD"},
+	"BAUUL": {"painSound": "baullpain.wav", "deathSound": "baull.wav", "weaponSound": "swish1.wav", "yellSound": "baullspeak.wav", "sound": "baullspeak.wav", "moveSpeed": 140.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 20, "maxHealth": 25, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 620.0, "stopDistance": 270.0, "spellCooldown": 2.0, "personality": "BRUTE"},
+	"CORPSE": {"painSound": "impact.wav", "deathSound": "goblindeath.wav", "weaponSound": "swish9.wav", "yellSound": "ghoul.wav", "sound": "ghoul.wav", "moveSpeed": 110.0 * SPEED_MULT, "aggroRadius": 650.0, "damage": 8, "maxHealth": 15, "personality": "DROWSY"},
+	"SORCERER": {"painSound": "sorcererpain.wav", "deathSound": "sorcererdie.wav", "weaponSound": "swish7.wav", "yellSound": "sorcererspeak.wav", "sound": "sorcererspeak.wav", "moveSpeed": 160.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 18, "maxHealth": 20, "canCastSpells": true, "spellLevel": "heavy", "spells": SPELLS, "attackRange": 650.0, "stopDistance": 260.0, "spellCooldown": 1.6, "personality": "CUNNING"},
+	"TENTACLE": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 120.0 * SPEED_MULT, "aggroRadius": 700.0, "damage": 5, "maxHealth": 17, "personality": "BERSERKER"},
+	"WRAITH": {"painSound": "wraithpain.wav", "deathSound": "wraithdie.wav", "weaponSound": "swish4.wav", "yellSound": "wraithspeak.wav", "sound": "wraithspeak.wav", "moveSpeed": 180.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 12, "maxHealth": 28, "canCastSpells": true, "spellLevel": "heavy", "spells": SPELLS, "attackRange": 600.0, "stopDistance": 250.0, "spellCooldown": 1.8, "personality": "CUNNING"},
+	"OGRE": {"painSound": "impact3.wav", "deathSound": "death1.wav", "weaponSound": "swish7.wav", "yellSound": "ogre.wav", "sound": "ogre.wav", "moveSpeed": 130.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 25, "maxHealth": 25, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 550.0, "stopDistance": 220.0, "spellCooldown": 2.2, "personality": "BRUTE"},
+	"PHANTOM": {"painSound": "impact4.wav", "deathSound": "death2.wav", "weaponSound": "swish7.wav", "yellSound": "baull.wav", "sound": "baull.wav", "moveSpeed": 170.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 16, "maxHealth": 20, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 600.0, "stopDistance": 250.0, "spellCooldown": 2.0, "personality": "SHOWOFF"},
+	"OGRO": {"painSound": "impact3.wav", "deathSound": "death1.wav", "weaponSound": "swish7.wav", "yellSound": "ogre.wav", "sound": "ogre.wav", "moveSpeed": 135.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 14, "maxHealth": 20, "personality": "BERSERKER"},
+	"SKELETON2": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 165.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 10, "maxHealth": 15, "personality": "PACK_LEADER"},
+	"DEMONESS": {"painSound": "impact3.wav", "deathSound": "death4.wav", "weaponSound": "swish7.wav", "yellSound": "ogre.wav", "sound": "ogre.wav", "moveSpeed": 175.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 22, "maxHealth": 35, "canCastSpells": true, "spellLevel": "savage", "spells": SPELLS, "attackRange": 680.0, "stopDistance": 280.0, "spellCooldown": 1.6, "personality": "SHOWOFF"},
+	"FAERIE": {"painSound": "faeriepain.wav", "deathSound": "faeriedie.wav", "weaponSound": "swish7.wav", "yellSound": "faeriespeak.wav", "sound": "faeriespeak.wav", "moveSpeed": 185.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 15, "maxHealth": 30, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 700.0, "stopDistance": 300.0, "spellCooldown": 1.4, "personality": "CUNNING"},
+	"SLAVE": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 140.0 * SPEED_MULT, "aggroRadius": 600.0, "damage": 5, "maxHealth": 5, "personality": "COWARD"},
+	"WOLF": {"painSound": "wolfpain.wav", "deathSound": "wolfdie.wav", "weaponSound": "swish4.wav", "yellSound": "wolfhowl.wav", "sound": "wolfhowl.wav", "moveSpeed": 210.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 12, "maxHealth": 20, "personality": "PACK_LEADER"},
+	"INSECT": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 195.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 10, "maxHealth": 20, "personality": "BERSERKER"},
+	"OLUVE": {"painSound": "impact5.wav", "deathSound": "Skeleton.wav", "weaponSound": "swish9.wav", "yellSound": "mouther.wav", "sound": "mouther.wav", "moveSpeed": 150.0 * SPEED_MULT, "aggroRadius": 700.0, "damage": 6, "maxHealth": 17, "personality": "DROWSY"},
+	"MUMMY": {"painSound": "mummypain.wav", "deathSound": "mummydie.wav", "weaponSound": "swish7.wav", "yellSound": "mummyspeak.wav", "sound": "mummyspeak.wav", "moveSpeed": 125.0 * SPEED_MULT, "aggroRadius": 750.0, "damage": 12, "maxHealth": 18, "personality": "DROWSY"},
+	"HYDRA": {"painSound": "hydrapain.wav", "deathSound": "hydradie.wav", "weaponSound": "swish1.wav", "yellSound": "hydraspeak.wav", "sound": "hydraspeak.wav", "moveSpeed": 145.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 16, "maxHealth": 20, "personality": "VIGILANT"},
+	"NECROMANCER": {"painSound": "necropain.wav", "deathSound": "necrodie.wav", "weaponSound": "swish5.wav", "yellSound": "necrospeak.wav", "sound": "necrospeak.wav", "moveSpeed": 160.0 * SPEED_MULT, "aggroRadius": 1000.0, "damage": 24, "maxHealth": 35, "canCastSpells": true, "spellLevel": "savage", "spells": SPELLS, "attackRange": 650.0, "stopDistance": 280.0, "spellCooldown": 1.8, "personality": "PACK_LEADER"},
+	"IMP": {"painSound": "imppain.wav", "deathSound": "impdie.wav", "weaponSound": "swish1.wav", "yellSound": "impspeak.wav", "sound": "impspeak.wav", "moveSpeed": 180.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 10, "maxHealth": 20, "personality": "COWARD"},
+	"DEMON": {"painSound": "demonpain.wav", "deathSound": "demondie.wav", "weaponSound": "swish7.wav", "yellSound": "demonspeak.wav", "sound": "demonspeak.wav", "moveSpeed": 165.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 20, "maxHealth": 25, "personality": "BERSERKER"},
+	"FULIMO": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 170.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 18, "maxHealth": 25, "canCastSpells": true, "spellLevel": "heavy", "spells": SPELLS, "attackRange": 650.0, "stopDistance": 260.0, "spellCooldown": 1.6, "personality": "SHOWOFF"},
+	"COBRA": {"painSound": "impact.wav", "deathSound": "snakedie.wav", "weaponSound": "swish7.wav", "yellSound": "snakehiss.wav", "sound": "snakehiss.wav", "moveSpeed": 190.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 14, "maxHealth": 30, "personality": "VIGILANT"},
+	"DRAGON": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 160.0 * SPEED_MULT, "aggroRadius": 1000.0, "damage": 28, "maxHealth": 30, "personality": "BRUTE"},
+	"CENTAUR": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 190.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 12, "maxHealth": 16, "personality": "VIGILANT"},
+	"CRAZ": {"painSound": "impact.wav", "deathSound": "death3.wav", "weaponSound": "swish7.wav", "yellSound": "orc.wav", "sound": "orc.wav", "moveSpeed": 175.0 * SPEED_MULT, "aggroRadius": 800.0, "damage": 14, "maxHealth": 20, "personality": "BERSERKER"},
+	"RIDER": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 180.0 * SPEED_MULT, "aggroRadius": 900.0, "damage": 20, "maxHealth": 26, "personality": "PACK_LEADER"},
+	"OKTA": {"painSound": "fulimopain.wav", "deathSound": "fulimodie.wav", "weaponSound": "swish7.wav", "yellSound": "fulimospeak.wav", "sound": "fulimospeak.wav", "moveSpeed": 165.0 * SPEED_MULT, "aggroRadius": 850.0, "damage": 16, "maxHealth": 25, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 600.0, "stopDistance": 250.0, "spellCooldown": 1.8, "personality": "CUNNING"},
+	"SORB": {"painSound": "impact.wav", "deathSound": "sorbdie.wav", "weaponSound": "swish7.wav", "yellSound": "sorb.wav", "sound": "sorb.wav", "moveSpeed": 170.0 * SPEED_MULT, "aggroRadius": 950.0, "damage": 22, "maxHealth": 29, "canCastSpells": true, "spellLevel": "basic", "spells": SPELLS, "attackRange": 620.0, "stopDistance": 260.0, "spellCooldown": 1.8, "personality": "SHOWOFF"},
 }
 
 # Order matters for substring matching, so keep the browser's key order.
@@ -161,7 +187,13 @@ var hp_bar: Node3D = null
 var _hp_quad: MeshInstance3D
 var _hp_name: Label3D
 var _hp_text: Label3D
+var _hp_trait: Label3D
 var scale := 1.0
+var personality := ""
+var enraged := false
+var has_fled := false
+var attack_cooldown_scale := 1.0
+var _base_config: Dictionary
 
 
 static func clear_shared() -> void:
@@ -201,6 +233,7 @@ func _init(p_game, p_model: MD2Model, p_mesh: MeshInstance3D, p_weapon_model: MD
 	if depth_power > 1.0:
 		config.maxHealth = roundi(config.maxHealth * depth_power)
 		config.damage = roundi(config.damage * depth_power)
+	_base_config = config.duplicate(true)
 	name = str(config.get("name", "MONSTER")).to_upper()
 	position = initial_position
 	rotation_y = initial_rotation_y
@@ -216,6 +249,7 @@ func _init(p_game, p_model: MD2Model, p_mesh: MeshInstance3D, p_weapon_model: MD
 	set_animation(ANIMS.STAND, true)
 	_update_morph_targets(0.0)
 	_create_health_bar()
+	set_personality(str(config.get("personality", "")))
 
 
 func _sync_transforms() -> void:
@@ -224,6 +258,65 @@ func _sync_transforms() -> void:
 	if weapon_mesh != null:
 		weapon_mesh.position = position
 		weapon_mesh.rotation = Vector3(0, rotation_y - PI / 2.0, 0)
+
+
+# ---------------------------------------------------------------- Personality
+
+## Rebuilds the config from the family stats with the personality applied and refills health.
+func set_personality(id: String) -> void:
+	personality = id if PERSONALITIES.has(id) else ""
+	config = _base_config.duplicate(true)
+	enraged = false
+	has_fled = false
+	attack_cooldown_scale = 1.0
+	var p: Dictionary = PERSONALITIES.get(personality, {})
+	config.maxHealth = maxi(1, roundi(config.maxHealth * float(p.get("health", 1.0))))
+	config.damage = maxi(1, roundi(config.damage * float(p.get("damage", 1.0))))
+	config.moveSpeed *= float(p.get("speed", 1.0))
+	config.aggroRadius *= float(p.get("aggro", 1.0))
+	config.deaggroRadius = maxf(config.deaggroRadius, config.aggroRadius * 1.5)
+	config.alertDuration *= float(p.get("alert", 1.0))
+	config["gestureChance"] = minf(1.0, GESTURE_CHANCE * float(p.get("gesture", 1.0)))
+	config["xpMult"] = float(p.get("xp", 1.0))
+	health = config.maxHealth
+	if _hp_trait != null:
+		_hp_trait.text = str(p.get("title", "")).to_upper()
+		_hp_trait.modulate = Color(p.get("color", "#ffffff"))
+		_hp_trait.visible = personality != ""
+	update_health_bar()
+
+
+func _bark(lines_key: String = "barks", chance: float = BARK_CHANCE) -> void:
+	if personality == "" or randf() >= chance or not game.fx.has_method("create_floating_text"):
+		return
+	var p: Dictionary = PERSONALITIES[personality]
+	var line: String = p[lines_key].pick_random() if p.has(lines_key) else lines_key
+	game.fx.create_floating_text(line, position + Vector3(0, health_bar_height + 20.0, 0), p.color)
+
+
+## Berserkers fight harder once badly hurt.
+func _check_enrage(announce: bool) -> void:
+	if personality != "BERSERKER" or enraged or health <= 0.0 or health > config.maxHealth * BERSERK_HEALTH:
+		return
+	enraged = true
+	config.moveSpeed *= 1.35
+	config.damage = roundi(config.damage * 1.25)
+	attack_cooldown_scale = 0.6
+	if announce:
+		_bark("ENRAGED!", 1.0)
+
+
+func _should_flee() -> bool:
+	return personality == "COWARD" and not has_fled and health > 0.0 and health <= config.maxHealth * COWARD_FLEE_HEALTH
+
+
+## Pack leaders wake up nearby idle monsters when they spot the player.
+func _rally() -> void:
+	for other in game.monsters:
+		if other == self or other.dead or other.state != State.IDLE:
+			continue
+		if other.position.distance_to(position) <= RALLY_RADIUS:
+			other.set_state(State.ALERT, true)
 
 
 # ---------------------------------------------------------------- Health bar
@@ -248,8 +341,11 @@ func _create_health_bar() -> void:
 	hp_bar.add_child(_hp_quad)
 	_hp_name = _make_label(18, HORIZONTAL_ALIGNMENT_LEFT, Vector2(18 - 128, 32 - 20), Color(1, 1, 1))
 	_hp_text = _make_label(16, HORIZONTAL_ALIGNMENT_RIGHT, Vector2(238 - 128, 32 - 20), Effects.canvas_color("#cbd5e1"))
+	_hp_trait = _make_label(16, HORIZONTAL_ALIGNMENT_CENTER, Vector2(0, 32 + 10), Color(1, 1, 1))
+	_hp_trait.visible = false
 	hp_bar.add_child(_hp_name)
 	hp_bar.add_child(_hp_text)
+	hp_bar.add_child(_hp_trait)
 	_hp_name.text = name if name != "" else "MONSTER"
 	game.world_root.add_child(hp_bar)
 	update_health_bar()
@@ -413,7 +509,7 @@ func _active_animation(locomotion: Dictionary, dt: float, dist: float) -> bool:
 	gesture_timer -= dt
 	if gesture_timer <= 0.0:
 		gesture_timer += 1.0
-		if randf() < GESTURE_CHANCE:
+		if randf() < float(config.get("gestureChance", GESTURE_CHANCE)):
 			var gesture: Dictionary = ANIMS[GESTURES.pick_random()]
 			if gesture.end < model.frame_count:
 				set_animation(gesture, current_anim.name == gesture.name)
@@ -526,7 +622,10 @@ func update(delta: float, player_pos: Vector3) -> void:
 				set_state(State.IDLE)
 			elif _active_animation(ANIMS.RUN, dt, dist):
 				if dist > config.stopDistance:
-					_move_forward(dt, player_pos)
+					if personality == "CUNNING" and not config.canCastSpells:
+						_weave_forward(dt, player_pos)
+					else:
+						_move_forward(dt, player_pos)
 				elif config.canCastSpells:
 					_tactical_movement(dt, dist, player_pos)
 		State.ATTACK:
@@ -559,12 +658,27 @@ func update(delta: float, player_pos: Vector3) -> void:
 				attack_cooldown = config.spellCooldown if config.spellCooldown > 0.0 else 0.5
 				if not is_melee_attack:
 					attack_cooldown *= float(SPELL_RECOVERY_SCALE[config.spellLevel])
+				attack_cooldown *= attack_cooldown_scale
 				has_dealt_damage = false
 				pending_spell = ""
 				set_state(State.CHASE if dist <= config.deaggroRadius else State.IDLE)
 		State.HURT:
 			if anim_complete:
+				if _should_flee():
+					has_fled = true
+					set_state(State.FLEE)
+					_bark("Run away!", 1.0)
+				else:
+					set_state(State.CHASE)
+		State.FLEE:
+			_smooth_turn(target_angle + PI, dt)
+			set_animation(ANIMS.RUN)
+			_move_forward(dt, player_pos)
+			if dist > config.deaggroRadius:
+				set_state(State.IDLE)
+			elif state_timer >= COWARD_FLEE_TIME:
 				set_state(State.CHASE)
+				_bark("Fine, I'll fight!", 1.0)
 
 	if _recover_if_fallen():
 		return
@@ -650,6 +764,13 @@ func _move_forward(dt: float, player_pos: Vector3) -> void:
 	_move_horizontal(Vector3(sin(rotation_y), 0, cos(rotation_y)) * move_dist, player_pos)
 
 
+## Zig-zags toward the player so cunning monsters are harder to line up a hit on.
+func _weave_forward(dt: float, player_pos: Vector3) -> void:
+	var heading := rotation_y + sin(state_timer * 3.0) * 0.7
+	var move_dist: float = config.moveSpeed * dt
+	_move_horizontal(Vector3(sin(heading), 0, cos(heading)) * move_dist, player_pos)
+
+
 func _move_horizontal(displacement: Vector3, player_pos: Vector3) -> void:
 	# Keep each move on the near side of thin walls, even during a long frame.
 	var max_step := CollisionWorld.MONSTER_CAPSULE_RADIUS * 0.5
@@ -660,7 +781,7 @@ func _move_horizontal(displacement: Vector3, player_pos: Vector3) -> void:
 		_resolve(true, player_pos)
 
 
-func set_state(new_state: int) -> void:
+func set_state(new_state: int, quiet: bool = false) -> void:
 	if state == new_state or state == State.DEATH:
 		return
 	var old_state := state
@@ -688,8 +809,11 @@ func set_state(new_state: int) -> void:
 		else:
 			is_melee_attack = true
 			pending_spell = ""
-	if old_state == State.IDLE and (new_state == State.ALERT or new_state == State.CHASE):
+	if old_state == State.IDLE and (new_state == State.ALERT or new_state == State.CHASE) and not quiet:
 		_play_noise(position.distance_to(player_pos))
+		_bark()
+		if personality == "PACK_LEADER":
+			_rally()
 
 
 func take_damage(damage: float) -> void:
@@ -708,10 +832,11 @@ func take_damage(damage: float) -> void:
 		if dist <= 1200.0:
 			game.audio.play_world_sound(config.get("deathSound", "die.wav"), position, 0.7)
 		game.drop_treasure(position)
-		game.award_player_xp(config.maxHealth * 2)
+		game.award_player_xp(roundi(config.maxHealth * 2 * float(config.get("xpMult", 1.0))))
 		if dist <= 600.0:
 			game.vibrate(150, 0.7, 0.5)
 	else:
+		_check_enrage(true)
 		set_state(State.HURT)
 		var pains := [ANIMS.PAIN1, ANIMS.PAIN2, ANIMS.PAIN3]
 		set_animation(pains[randi() % 3], true)
@@ -728,6 +853,7 @@ func restore_snapshot(s: Dictionary) -> void:
 	_sync_transforms()
 	health = clampf(s.hp, 0.0, config.maxHealth)
 	if int(s.get("d", 0)) == 0 and health > 0.0:
+		_check_enrage(false)
 		update_health_bar()
 		return
 	health = 0.0
