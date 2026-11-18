@@ -121,6 +121,8 @@ void fragment() {
 static var _bar_material: ShaderMaterial = null
 static var _bar_quad: QuadMesh = null
 static var _bar_font: SystemFont = null
+# Size multiplier for the overhead health bar, name, and HP text (1.0 = default).
+static var health_bar_scale := 0.50
 
 var game # Game (untyped to avoid a class cycle)
 var model: MD2Model
@@ -241,7 +243,7 @@ func _create_health_bar() -> void:
 	_hp_quad = MeshInstance3D.new()
 	_hp_quad.mesh = _bar_quad
 	_hp_quad.material_override = Materials.material_for_instance(_bar_material)
-	_hp_quad.scale = Vector3(80, 20, 1)
+	_hp_quad.scale = Vector3(80 * health_bar_scale, 20 * health_bar_scale, 1)
 	_hp_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	hp_bar.add_child(_hp_quad)
 	_hp_name = _make_label(18, HORIZONTAL_ALIGNMENT_LEFT, Vector2(18 - 128, 32 - 20), Color(1, 1, 1))
@@ -257,7 +259,7 @@ func _make_label(size: int, align: int, offset: Vector2, color: Color) -> Label3
 	var l := Label3D.new()
 	l.font = _bar_font
 	l.font_size = size
-	l.pixel_size = 80.0 / 256.0
+	l.pixel_size = 80.0 / 256.0 * health_bar_scale
 	l.horizontal_alignment = align
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.offset = offset
