@@ -478,16 +478,18 @@ func _init_particles() -> void:
 	_p_age.resize(MAX_PARTICLES)
 	_p_life.resize(MAX_PARTICLES)
 	_p_buf.resize(MAX_PARTICLES * 16)
+	_p_buf.fill(0.0) # Off-diagonal transform elements stay zero in every frame.
 	_p_mm = _make_multimesh(PARTICLE_SHADER, MAX_PARTICLES, false)
 
 
 func emit_particle(x: float, y: float, z: float, vx: float, vy: float, vz: float, color_hex: int, size: float, life: float) -> void:
 	var slot := -1
-	for n in MAX_PARTICLES:
-		var c := (_p_next + n) % MAX_PARTICLES
-		if _p_life[c] <= 0.0:
-			slot = c
-			break
+	if _p_alive < MAX_PARTICLES:
+		for n in MAX_PARTICLES:
+			var c := (_p_next + n) % MAX_PARTICLES
+			if _p_life[c] <= 0.0:
+				slot = c
+				break
 	if slot == -1:
 		slot = _p_next
 		_p_alive -= 1
@@ -505,26 +507,17 @@ func emit_particle(x: float, y: float, z: float, vx: float, vy: float, vz: float
 
 func _update_particles(delta: float) -> void:
 	if _p_alive <= 0:
-		if _p_high != 0:
-			_p_high = 0
-			_p_mm.visible_instance_count = 0
 		return
-	var buf := _p_buf
+	# Simulation uses ring slots; the renderer needs only the live prefix.
+	var drawn := 0
 	for i in _p_high:
-		var o := i * 16
 		var life := _p_life[i]
 		if life <= 0.0:
-			buf[o] = 0.0
-			buf[o + 5] = 0.0
-			buf[o + 10] = 0.0
 			continue
 		var age := _p_age[i] + delta
 		if age >= life:
 			_p_life[i] = 0.0
 			_p_alive -= 1
-			buf[o] = 0.0
-			buf[o + 5] = 0.0
-			buf[o + 10] = 0.0
 			continue
 		_p_age[i] = age
 		var v := _p_vel[i]
@@ -535,13 +528,18 @@ func _update_particles(delta: float) -> void:
 		var fade := 1.0 - age / life
 		var c := _p_base[i]
 		var s := _p_size[i] * POINT_TO_WORLD
-		buf[o] = s; buf[o + 1] = 0.0; buf[o + 2] = 0.0; buf[o + 3] = p.x
-		buf[o + 4] = 0.0; buf[o + 5] = s; buf[o + 6] = 0.0; buf[o + 7] = p.y
-		buf[o + 8] = 0.0; buf[o + 9] = 0.0; buf[o + 10] = s; buf[o + 11] = p.z
-		buf[o + 12] = c.r * fade; buf[o + 13] = c.g * fade; buf[o + 14] = c.b * fade; buf[o + 15] = 1.0
-	_p_buf = buf
-	RenderingServer.multimesh_set_buffer(_p_mm.get_rid(), _p_buf)
-	_p_mm.visible_instance_count = _p_high
+		var o := drawn * 16
+		_p_buf[o] = s; _p_buf[o + 3] = p.x
+		_p_buf[o + 5] = s; _p_buf[o + 7] = p.y
+		_p_buf[o + 10] = s; _p_buf[o + 11] = p.z
+		_p_buf[o + 12] = c.r * fade; _p_buf[o + 13] = c.g * fade; _p_buf[o + 14] = c.b * fade; _p_buf[o + 15] = 1.0
+		drawn += 1
+	if drawn > 0:
+		RenderingServer.multimesh_set_buffer(_p_mm.get_rid(), _p_buf)
+	else:
+		_p_high = 0
+		_p_next = 0
+	_p_mm.visible_instance_count = drawn
 
 
 func create_treasure_drop_effect(pos: Vector3) -> void:
@@ -579,17 +577,19 @@ func _init_blood() -> void:
 	_b_floor.resize(MAX_BLOOD)
 	_b_trail.resize(MAX_BLOOD)
 	_b_buf.resize(MAX_BLOOD * 20)
+	_b_buf.fill(0.0)
 	_b_mm = _make_multimesh(BLOOD_SHADER, MAX_BLOOD, true, "soft = INSTANCE_CUSTOM.x;")
 
 
 func _emit_blood(x: float, y: float, z: float, vx: float, vy: float, vz: float, r: float, g: float, b: float, a: float,
 		size: float, life: float, gravity: float, drag: float, growth: float, soft: float, floor_y: float, trail: bool) -> void:
 	var slot := -1
-	for n in MAX_BLOOD:
-		var c := (_b_next + n) % MAX_BLOOD
-		if _b_life[c] <= 0.0:
-			slot = c
-			break
+	if _b_alive < MAX_BLOOD:
+		for n in MAX_BLOOD:
+			var c := (_b_next + n) % MAX_BLOOD
+			if _b_life[c] <= 0.0:
+				slot = c
+				break
 	if slot == -1:
 		slot = _b_next
 		_b_alive -= 1
@@ -806,9 +806,6 @@ func _update_blood_decals(delta: float) -> void:
 func _update_blood(delta: float) -> void:
 	_update_blood_decals(delta)
 	if _b_alive <= 0:
-		if _b_high != 0:
-			_b_high = 0
-			_b_mm.visible_instance_count = 0
 		return
 	var high := _b_high
 	for i in high:
@@ -853,22 +850,26 @@ func _update_blood(delta: float) -> void:
 				c.a = (1.0 - t) / 0.15
 		_b_col[i] = c
 	high = _b_high
-	var buf := _b_buf
+	var drawn := 0
 	for i in high:
-		var o := i * 20
-		var s := 0.0
-		if _b_life[i] > 0.0:
-			s = _b_size[i] * POINT_TO_WORLD
+		if _b_life[i] <= 0.0:
+			continue
+		var o := drawn * 20
+		var s := _b_size[i] * POINT_TO_WORLD
 		var p := _b_pos[i]
 		var c := _b_col[i]
-		buf[o] = s; buf[o + 1] = 0.0; buf[o + 2] = 0.0; buf[o + 3] = p.x
-		buf[o + 4] = 0.0; buf[o + 5] = s; buf[o + 6] = 0.0; buf[o + 7] = p.y
-		buf[o + 8] = 0.0; buf[o + 9] = 0.0; buf[o + 10] = s; buf[o + 11] = p.z
-		buf[o + 12] = c.r; buf[o + 13] = c.g; buf[o + 14] = c.b; buf[o + 15] = c.a if s > 0.0 else 0.0
-		buf[o + 16] = _b_soft[i]; buf[o + 17] = 0.0; buf[o + 18] = 0.0; buf[o + 19] = 0.0
-	_b_buf = buf
-	RenderingServer.multimesh_set_buffer(_b_mm.get_rid(), _b_buf)
-	_b_mm.visible_instance_count = high
+		_b_buf[o] = s; _b_buf[o + 3] = p.x
+		_b_buf[o + 5] = s; _b_buf[o + 7] = p.y
+		_b_buf[o + 10] = s; _b_buf[o + 11] = p.z
+		_b_buf[o + 12] = c.r; _b_buf[o + 13] = c.g; _b_buf[o + 14] = c.b; _b_buf[o + 15] = c.a
+		_b_buf[o + 16] = _b_soft[i]
+		drawn += 1
+	if drawn > 0:
+		RenderingServer.multimesh_set_buffer(_b_mm.get_rid(), _b_buf)
+	else:
+		_b_high = 0
+		_b_next = 0
+	_b_mm.visible_instance_count = drawn
 
 
 func clear_blood() -> void:
@@ -877,6 +878,7 @@ func clear_blood() -> void:
 		_b_size[i] = 0.0
 	_b_alive = 0
 	_b_high = 0
+	_b_next = 0
 	_b_mm.visible_instance_count = 0
 	for d: Dictionary in _decals:
 		d.active = false
@@ -933,3 +935,17 @@ func clear_floating_texts() -> void:
 	for item: Dictionary in floating_texts:
 		(item.label as Label3D).queue_free()
 	floating_texts.clear()
+
+
+func clear_world_effects() -> void:
+	clear_lamps()
+	clear_blood()
+	clear_floating_texts()
+	_p_life.fill(0.0)
+	_p_alive = 0
+	_p_high = 0
+	_p_next = 0
+	_p_mm.visible_instance_count = 0
+	for flash: Dictionary in explosion_flashes:
+		release_dynamic_light(flash.slot)
+	explosion_flashes.clear()

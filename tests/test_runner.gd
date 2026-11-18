@@ -80,6 +80,7 @@ func _run_tests() -> void:
 	check(wav != null and wav.data.size() > 0, "IMA-ADPCM wav decodes")
 
 	_xr_tests(models)
+	_effect_pool_tests()
 
 	TDSModel.clear_cache()
 	MD2Model.clear_cache()
@@ -87,6 +88,29 @@ func _run_tests() -> void:
 
 	print("FAILED: %d" % _failures if _failures > 0 else "ALL TESTS PASSED")
 	quit(1 if _failures > 0 else 0)
+
+
+func _effect_pool_tests() -> void:
+	var fx := Effects.new()
+	root.add_child(fx)
+	for i in 2:
+		var life := 0.01 if i == 0 else 1.0
+		fx.emit_particle(i, 10, 0, 0, 0, 0, 0xff0000, 2, life)
+		fx._emit_blood(i, 10, 0, 0, 0, 0, 1, 0, 0, 1, 2, life, 0, 0, 0, 1, 0, false)
+	fx.update_pickup_effects(0.02)
+	check(fx._p_mm.visible_instance_count == 1 and fx._p_buf[3] == 1.0,
+		"only surviving spark is submitted, with its own transform")
+	check(fx._b_mm.visible_instance_count == 1 and fx._b_buf[3] == 1.0 and fx._b_buf[16] == 1.0,
+		"only surviving blood instance is submitted, with its own transform and softness")
+	fx.add_explosion_flash(Vector3.ZERO, 0xffffff, 100)
+	var flash: Effects.LightSlot = fx.explosion_flashes[0].slot
+	fx.create_floating_text("pickup", Vector3.ZERO, "#ffffff")
+	fx.clear_world_effects()
+	fx.update_pickup_effects(0.01)
+	check(not flash.busy and fx.floating_texts.is_empty() and fx.explosion_flashes.is_empty()
+		and fx._p_mm.visible_instance_count == 0 and fx._b_mm.visible_instance_count == 0,
+		"changing worlds releases transient effects immediately")
+	fx.free()
 
 
 class QuietAudio:

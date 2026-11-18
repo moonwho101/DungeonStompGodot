@@ -731,8 +731,7 @@ func clear_current_world() -> void:
 	active_pickups.clear()
 	doors.clear()
 	chests.clear()
-	fx.clear_lamps()
-	fx.clear_blood()
+	fx.clear_world_effects()
 	collision.clear()
 
 

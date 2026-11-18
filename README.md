@@ -124,8 +124,13 @@ The shared materials use a custom per-pixel Lambert light function to preserve f
 Run the headless test suite to verify parsers, collision math, model loaders, dungeon generation, fall recovery, and monster attack range:
 
 ```bash
-godot --headless --path . -s res://tests/test_runner.gd
+godot --headless --xr-mode off --path . -s res://tests/test_runner.gd
 ```
+
+To compare combat particle CPU cost between revisions, run
+`godot --headless --xr-mode off --path . -s res://tests/bench_effects.gd`.
+It reports the median update time and submitted instances after a full pool expires down to 32 live sparks.
+This does not measure Quest GPU time or overall frame rate.
 
 Lighting regression tests need a real GPU renderer (not `--headless`). They measure point-light falloff against the intended curve:
 

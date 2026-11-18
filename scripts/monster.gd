@@ -201,7 +201,7 @@ func _init(p_game, p_model: MD2Model, p_mesh: MeshInstance3D, p_weapon_model: MD
 	_sync_transforms()
 	health = config.maxHealth
 	current_anim = ANIMS.STAND
-	_update_bounding_box()
+	_update_bounding_box(current_anim.start)
 	if not bbox.is_empty():
 		health_bar_height = bbox.max.y - position.y + 12.0
 	noise_timer = 3.0 + randf() * 8.0
@@ -368,18 +368,18 @@ func _update_morph_targets(delta: float) -> void:
 	model.set_pose(mesh, kept_f, kept_w)
 	if weapon_model != null and weapon_mesh is GeometryInstance3D:
 		weapon_model.set_pose(weapon_mesh, kept_f, kept_w)
+	_update_bounding_box(cur[0])
 
 
-func _update_bounding_box() -> void:
+func _update_bounding_box(frame: int) -> void:
 	if state == State.DEATH:
 		bbox.make_empty()
 		return
-	var frame: int = get_current_pose()[0]
 	var local := model.frame_aabb(frame)
 	var xf := Transform3D(Basis(Vector3.UP, rotation_y - PI / 2.0).scaled(Vector3(scale, scale, scale)), position)
-	bbox.make_empty()
-	for i in 8:
-		bbox.expand(xf * local.get_endpoint(i))
+	var world := xf * local
+	bbox.min = world.position
+	bbox.max = world.end
 
 
 # ---------------------------------------------------------------- AI
@@ -431,7 +431,6 @@ func update(delta: float, player_pos: Vector3) -> void:
 			_tick_ambient_noise(dt, dist)
 			if dist_sq <= 3000.0 * 3000.0:
 				_update_morph_targets(dt)
-				_update_bounding_box()
 			return
 
 	var est_dy := absf(velocity.y * dt)
@@ -454,7 +453,6 @@ func update(delta: float, player_pos: Vector3) -> void:
 			weapon_mesh.queue_free()
 			weapon_mesh = null
 		_update_morph_targets(dt)
-		_update_bounding_box()
 		return
 
 	state_timer += dt
@@ -545,7 +543,6 @@ func update(delta: float, player_pos: Vector3) -> void:
 		return
 	_sync_transforms()
 	_update_morph_targets(dt)
-	_update_bounding_box()
 
 
 func _attack_distance_to(player_pos: Vector3) -> float:
@@ -585,7 +582,6 @@ func _recover_if_fallen() -> bool:
 		attack_cooldown = 0.5
 	_sync_transforms()
 	_update_morph_targets(0.0)
-	_update_bounding_box()
 	if hp_bar != null:
 		hp_bar.position = position + Vector3(0, health_bar_height, 0)
 		hp_bar.visible = state != State.DEATH
