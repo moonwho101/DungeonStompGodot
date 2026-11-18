@@ -3,10 +3,13 @@ class_name AudioManager
 extends Node
 
 const MAX_CONCURRENT_SOUNDS := 24
+const WORLD_VOICES := 12
+const HEARING_RANGE := 1200.0
 const MUSIC_TRACKS := ["Midi/d1.wav", "Midi/d2.wav", "Midi/d3.wav", "Midi/d4.wav"]
 
 var _streams: Dictionary = {} # rel path -> AudioStream or null
 var _players: Array = []
+var _world_players: Array[AudioStreamPlayer3D] = []
 var music_enabled := true
 var _music_player: AudioStreamPlayer
 var _music_playing := false
@@ -17,10 +20,18 @@ var _pickup_streams: Dictionary = {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	for i in MAX_CONCURRENT_SOUNDS:
+	for i in MAX_CONCURRENT_SOUNDS - WORLD_VOICES:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
+	for i in WORLD_VOICES:
+		var p := AudioStreamPlayer3D.new()
+		# max_distance supplies a linear fade in dungeon units, not Godot's metre-scale rolloff.
+		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+		p.max_distance = HEARING_RANGE
+		p.attenuation_filter_db = 0
+		add_child(p)
+		_world_players.append(p)
 	_music_player = AudioStreamPlayer.new()
 	_music_player.finished.connect(_on_music_finished)
 	add_child(_music_player)
@@ -197,6 +208,26 @@ func _play_stream(stream: AudioStream, volume: float) -> void:
 			p.volume_db = linear_to_db(clampf(volume, 0.0001, 1.0)) if volume > 0.0 else -80.0
 			p.play()
 			return
+
+
+func play_world_sound(filename: String, origin: Vector3, volume: float, attack_warning := false) -> void:
+	var stream := _load_stream(_rel(filename))
+	if stream == null:
+		return
+	# Keep two voices available for spell windups when nearby monsters are noisy.
+	for i in range(WORLD_VOICES if attack_warning else WORLD_VOICES - 2):
+		var p := _world_players[i]
+		if not p.playing:
+			p.global_position = origin
+			p.stream = stream
+			p.volume_db = linear_to_db(volume)
+			p.play()
+			return
+
+
+func stop_world_sounds() -> void:
+	for p in _world_players:
+		p.stop()
 
 
 static func random_sound(list: Array) -> String:

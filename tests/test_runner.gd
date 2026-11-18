@@ -80,6 +80,10 @@ func _run_tests() -> void:
 
 	var wav := AudioManager.load_wav(FileAccess.get_file_as_bytes(DataPaths.path("Sounds/swish8.wav")))
 	check(wav != null and wav.data.size() > 0, "IMA-ADPCM wav decodes")
+	for file: String in Game.DOOR_OPEN_SOUNDS:
+		var slide := AudioManager.load_wav(FileAccess.get_file_as_bytes(DataPaths.path("Sounds/" + file)))
+		check(slide != null and slide.get_length() > 0 and slide.loop_mode == AudioStreamWAV.LOOP_DISABLED,
+			"door slide decodes for one-shot playback: " + file)
 
 	_xr_tests(models)
 	_effect_pool_tests()
@@ -117,6 +121,9 @@ func _effect_pool_tests() -> void:
 
 class QuietAudio:
 	extends RefCounted
+
+	func play_world_sound(_file: String, _position: Vector3, _volume: float, _warning := false) -> void:
+		pass
 
 	func play_sound(_file: String, _volume: float) -> void:
 		pass

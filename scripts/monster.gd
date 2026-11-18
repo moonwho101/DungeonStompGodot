@@ -399,7 +399,7 @@ func _play_noise(dist: float) -> void:
 	var f: String = config.get("yellSound", "")
 	if f == "":
 		f = config.get("sound", "goblin.wav")
-	game.audio.play_sound(f, maxf(0.05, (1.0 - dist / 1200.0) * 0.7))
+	game.audio.play_world_sound(f, position, 0.7)
 
 
 func _tick_ambient_noise(dt: float, dist: float) -> void:
@@ -554,7 +554,7 @@ func update(delta: float, player_pos: Vector3) -> void:
 						has_dealt_damage = true
 						var ws: String = config.get("weaponSound", "swish4.wav")
 						if dist <= 1200.0:
-							game.audio.play_sound(ws, maxf(0.05, (1.0 - dist / 1200.0) * 0.7))
+							game.audio.play_world_sound(ws, position, 0.7)
 						if _in_melee_reach(player_pos):
 							game.damage_player(config.damage)
 			if anim_complete:
@@ -682,11 +682,11 @@ func set_state(new_state: int) -> void:
 			is_melee_attack = false
 			pending_spell = config.spells[randi() % config.spells.size()]
 			if pending_spell == "MAGIC MISSILE":
-				game.audio.play_sound("spell1.wav", 0.8)
+				game.audio.play_world_sound("spell1.wav", position, 0.8, true)
 			elif pending_spell == "FIREBALL":
-				game.audio.play_sound("fireball.wav", 0.8)
+				game.audio.play_world_sound("fireball.wav", position, 0.8, true)
 			elif pending_spell == "LIGHTNING":
-				game.audio.play_sound("spell3.wav", 0.8)
+				game.audio.play_world_sound("spell3.wav", position, 0.8, true)
 		else:
 			is_melee_attack = true
 			pending_spell = ""
@@ -700,7 +700,6 @@ func take_damage(damage: float) -> void:
 	health -= damage
 	update_health_bar()
 	var dist := position.distance_to(game.player_position())
-	var volume := maxf(0.05, (1.0 - dist / 1200.0) * 0.7) if dist <= 1200.0 else 0.0
 	if health <= 0.0:
 		health = 0.0
 		update_health_bar()
@@ -709,7 +708,7 @@ func take_damage(damage: float) -> void:
 		var deaths := [ANIMS.DEATH1, ANIMS.DEATH2, ANIMS.DEATH3]
 		set_animation(deaths[randi() % 3], true)
 		if dist <= 1200.0:
-			game.audio.play_sound(config.get("deathSound", "die.wav"), volume)
+			game.audio.play_world_sound(config.get("deathSound", "die.wav"), position, 0.7)
 		game.drop_treasure(position)
 		game.award_player_xp(config.maxHealth * 2)
 		if dist <= 600.0:
@@ -719,7 +718,7 @@ func take_damage(damage: float) -> void:
 		var pains := [ANIMS.PAIN1, ANIMS.PAIN2, ANIMS.PAIN3]
 		set_animation(pains[randi() % 3], true)
 		if dist <= 1200.0:
-			game.audio.play_sound(config.get("painSound", "impact.wav"), volume)
+			game.audio.play_world_sound(config.get("painSound", "impact.wav"), position, 0.7)
 		if dist <= 600.0:
 			game.vibrate(110, 0.6, 0.35)
 

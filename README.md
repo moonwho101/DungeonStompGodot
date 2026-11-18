@@ -39,6 +39,7 @@ Monster pursuit and strafing use collision-checked movement steps no larger than
 - 🏰 **Infinite Procedural Dungeons:** Generate complete dungeons on the fly with seedable layouts, configurable room counts, corridors, teleporters, doors, and exit portals. Descend deeper into the dungeon where monsters grow stronger and rewards grow greater.
 - ⚔️ **Real-Time Combat & Full Arsenal:** 10 distinct melee weapons (Axe, Flamesword, Bastard Sword, Battle Axe, Ice Sword, Lightning Sword, Morning Star, Spiked Flail, Split Sword, and Super Flamesword) with authentic first-person bobbing, swinging animations, and impact effects.
 - 🔮 **Spellcasting System:** Cast devastating real-time spells including **Magic Missile**, **Fireball**, **Lightning**, and **Healing** with physics-driven projectile trajectories and splash damage.
+- **Listen around corners:** Monster calls, swings, spell windups, and explosions come from their position in the dungeon. Turn your head in VR to locate a caster before the projectile arrives. Music, menu sounds, and pickup chimes stay centered.
 - 🧟 **30 Monster Families:** Ogres, hydras, dragons, necromancers, demonesses, faeries, mummies, wraiths, goblins, skeletons, wolves, tentacle horrors, and more. Features state-machine AI with patrol, pursuit, melee attacks, and ranged spellcasting.
   Once alerted, standing or running monsters have a 5% chance per eligible second to flip, salute, taunt, wave, or point. Some gestures come with the monster's own call; they never delay pursuit or attacks.
   Spellcasters have three cadences: **Basic** keeps the original timing; **Heavy** (Sorcerer, Wraith, Fulimo) halves the recovery after a ranged cast; **Savage** (Necromancer, Demoness) takes only one eighth of the usual recovery. Every spell still has its normal windup and damage. Melee-only monsters do not gain spells.
@@ -159,7 +160,7 @@ Open **Options** during a run to toggle **God Mode** (invincibility) or **Fly Mo
 | `Space` | Jump (or fly up in fly mode) |
 | `Shift` | Sprint |
 | `Q` / `Z` | Next / previous weapon or spell |
-| `E` | Open nearby door / interact with chest |
+| `E` | Open nearby door / interact with chest. Stone doors play a sliding sound from the doorway as they open. |
 | `G` | Generate a new procedural dungeon level |
 | `N` | Toggle normal mapping |
 | `P` / `M` | Toggle music on/off |

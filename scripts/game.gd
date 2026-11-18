@@ -48,6 +48,7 @@ const SWISH_SOUNDS := ["swish1.wav", "swish4.wav", "swish5.wav", "swish7.wav", "
 const IMPACT_SOUNDS := ["impact.wav", "impact2.wav", "impact3.wav", "impact4.wav", "impact5.wav", "impact6.wav",
 	"impact7.wav", "impact8.wav", "impact10.wav"]
 const PLAYER_IMPACT_SOUNDS := ["pimpact.wav", "ouch.wav", "pain1.wav"]
+const DOOR_OPEN_SOUNDS := ["stone_slides_close.wav", "stoneloop.WAV"]
 const EXCLUDED_IDS := [6, 35, 131, 120]
 const EXCLUDED_NAMES := ["lamp_post", "!monster1", "startpos", "text"]
 const STATIC_CHUNK_SIZE := 1024.0
@@ -345,7 +346,7 @@ func _init_game() -> void:
 	world_ready = true
 	ui.show_loading(false)
 
-	var sounds: Array = SWISH_SOUNDS + IMPACT_SOUNDS + PLAYER_IMPACT_SOUNDS + ["spell1.wav", "spell2.wav", "spell3.wav",
+	var sounds: Array = SWISH_SOUNDS + IMPACT_SOUNDS + PLAYER_IMPACT_SOUNDS + DOOR_OPEN_SOUNDS + ["spell1.wav", "spell2.wav", "spell3.wav",
 		"fireball.wav", "explod1.wav", "explod2.wav", "walk.wav", "die.wav", "death1.wav", "death2.wav", "death3.wav", "death4.wav"]
 	for m: Monster in monsters:
 		for k in ["painSound", "deathSound", "weaponSound", "yellSound", "sound"]:
@@ -738,6 +739,7 @@ func clear_current_world() -> void:
 	doors.clear()
 	chests.clear()
 	fx.clear_world_effects()
+	audio.stop_world_sounds()
 	collision.clear()
 
 
@@ -1819,7 +1821,7 @@ func _explosion_particles(pos: Vector3, count: int, base_speed: float, speed_ran
 
 
 func trigger_spell_explosion(pos: Vector3, type: String, damage: float, aoe_radius: float, color_hex: int) -> void:
-	audio.play_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", 0.85)
+	audio.play_world_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", pos, 0.85)
 	var dist_p := pos.distance_to(camera.position)
 	if dist_p <= 600.0:
 		var intensity := maxf(0.2, 1.0 - dist_p / 600.0)
@@ -1833,11 +1835,11 @@ func trigger_spell_explosion(pos: Vector3, type: String, damage: float, aoe_radi
 		if dist <= aoe_radius:
 			var sc := maxf(0.5, 1.0 - (dist / aoe_radius) * 0.5)
 			m.take_damage(roundi(damage * sc))
-			audio.play_sound(AudioManager.random_sound(IMPACT_SOUNDS), 0.7)
+			audio.play_world_sound(AudioManager.random_sound(IMPACT_SOUNDS), m.position, 0.7)
 
 
 func trigger_monster_spell_explosion(pos: Vector3, type: String, damage: float, aoe_radius: float, color_hex: int) -> void:
-	audio.play_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", 0.85)
+	audio.play_world_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", pos, 0.85)
 	_explosion_particles(pos, 50 if type == "FIREBALL" else 35, 100.0, 220.0, color_hex, 12.0, 0.65)
 	fx.add_explosion_flash(pos, color_hex, aoe_radius)
 	var player_pos := camera.position
@@ -2084,6 +2086,7 @@ func open_nearby_door() -> void:
 			nearest_door = door
 	if not nearest_door.is_empty():
 		nearest_door.is_opening = true
+		audio.play_world_sound(AudioManager.random_sound(DOOR_OPEN_SOUNDS), nearest_door.position, 0.8)
 		vibrate(90, 0.2, 0.35)
 	var nearest_chest: Dictionary = {}
 	best = max_sq
