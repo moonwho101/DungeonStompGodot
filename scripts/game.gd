@@ -424,7 +424,7 @@ func pause_game_session() -> void:
 	ui.show_menu(true)
 	ui.show_loading(false)
 	ui.show_menu_view("main")
-	ui.set_prompt("Paused - Resume or choose an option:")
+	ui.set_prompt("Paused at Depth %d (Hero LVL %d). Resume to continue:" % [dungeon_depth, player_stats.level])
 	ui.set_resume_enabled(true)
 	save_current_run()
 	release_inputs()
