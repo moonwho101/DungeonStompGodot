@@ -618,7 +618,7 @@ func _menu_button(text: String, primary: bool = false) -> Button:
 	var b := Button.new()
 	b.text = text.to_upper()
 	b.add_theme_font_override("font", _font_bold)
-	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_font_size_override("font_size", 18)
 	b.focus_mode = Control.FOCUS_ALL
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
@@ -655,7 +655,7 @@ func _menu_button(text: String, primary: bool = false) -> Button:
 
 
 func _help(text: String) -> Label:
-	var l := _label(text, _font, 11, Color("#64748b"))
+	var l := _label(text, _font, 15, Color("#cbd5e1"))
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return l
@@ -663,9 +663,9 @@ func _help(text: String) -> Label:
 
 func _field_label(text: String, value: String) -> Array:
 	var row := HBoxContainer.new()
-	var l := _label(text, _font_bold, 13, Color("#cbd5e1"))
+	var l := _label(text, _font_bold, 17, Color("#e2e8f0"))
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var v := _label(value, _font_bold, 13, AMBER)
+	var v := _label(value, _font_bold, 17, AMBER)
 	row.add_child(l)
 	row.add_child(v)
 	return [row, v]
@@ -675,7 +675,11 @@ func _checkbox(text: String) -> CheckBox:
 	var c := CheckBox.new()
 	c.text = text
 	c.add_theme_font_override("font", _font)
-	c.add_theme_font_size_override("font_size", 14)
+	c.add_theme_font_size_override("font_size", 18)
+	c.add_theme_icon_override("unchecked", preload("res://scenes/menu_unchecked.svg"))
+	c.add_theme_icon_override("checked", preload("res://scenes/menu_checked.svg"))
+	c.add_theme_constant_override("h_separation", 12)
+	c.custom_minimum_size.y = 36
 	c.add_theme_color_override("font_color", Color("#e2e8f0"))
 	c.add_theme_color_override("font_hover_color", Color.WHITE)
 	c.add_theme_color_override("font_focus_color", Color("#fbbf24"))
@@ -699,7 +703,7 @@ func _slider(min_v: float, max_v: float, step: float) -> HSlider:
 
 
 func _h3(text: String) -> Label:
-	var l := _label(text.to_upper(), _font_bold, 18, Color("#fbbf24"))
+	var l := _label(text.to_upper(), _font_bold, 22, Color("#fbbf24"))
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return l
 
@@ -707,7 +711,7 @@ func _build_menu(root: Control) -> void:
 	_menu = PanelContainer.new()
 	_menu.add_theme_stylebox_override("panel", _style(Color(12 / 255.0, 15 / 255.0, 23 / 255.0, 0.97),
 		Color(1, 170 / 255.0, 0, 0.35), 1, 14, 32, 24, Color(0, 0, 0, 0.85), 48))
-	_menu.custom_minimum_size = Vector2(440, 0)
+	_menu.custom_minimum_size = Vector2(550, 0)
 	_menu.anchor_left = 0.5
 	_menu.anchor_right = 0.5
 	_menu.anchor_top = 0.5
@@ -720,18 +724,18 @@ func _build_menu(root: Control) -> void:
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 10)
 	_menu.add_child(outer)
-	var title := _label("⚔️ DUNGEON STOMP ⚔️", _font_bold, 24, AMBER)
+	var title := _label("⚔️ DUNGEON STOMP ⚔️", _font_bold, 29, AMBER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outer.add_child(title)
 	var credit := _label("Created by Mark Longo · Copyright © 2001-%d" % Time.get_date_dict_from_system().year,
-		_font, 12, Color("#94a3b8"))
+		_font, 15, Color("#cbd5e1"))
 	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outer.add_child(credit)
 
 	# Main view
 	var main := VBoxContainer.new()
 	main.add_theme_constant_override("separation", 10)
-	_prompt = _label("Loading dungeon...", _font, 13, Color("#94a3b8"))
+	_prompt = _label("Loading dungeon...", _font, 17, Color("#cbd5e1"))
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main.add_child(_prompt)
@@ -742,7 +746,7 @@ func _build_menu(root: Control) -> void:
 	_btn_options = _menu_button("Options")
 	for b in [_btn_new, _btn_resume, _btn_generator, _btn_options]:
 		main.add_child(b)
-	_status = _label("", _font, 13, Color("#38bdf8"))
+	_status = _label("", _font, 17, Color("#38bdf8"))
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main.add_child(_status)
 	if game != null and game.xr_rig != null:
@@ -770,7 +774,7 @@ func _build_menu(root: Control) -> void:
 	_gen_seed.placeholder_text = "Leave empty for random"
 	_gen_seed.max_length = 32
 	_gen_seed.add_theme_font_override("font", _font)
-	_gen_seed.add_theme_font_size_override("font_size", 14)
+	_gen_seed.add_theme_font_size_override("font_size", 18)
 	_gen_seed.add_theme_stylebox_override("normal", _style(Color(15 / 255.0, 23 / 255.0, 42 / 255.0, 0.85), Color(1, 1, 1, 0.2), 1, 6, 12, 9))
 	_gen_seed.add_theme_stylebox_override("focus", _style(Color(0, 0, 0, 0), AMBER, 1, 6))
 	gen.add_child(_gen_seed)

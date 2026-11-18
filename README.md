@@ -41,7 +41,7 @@ Monster pursuit and strafing use collision-checked movement steps no larger than
 - 🔮 **Spellcasting System:** Cast devastating real-time spells including **Magic Missile**, **Fireball**, **Lightning**, and **Healing** with physics-driven projectile trajectories and splash damage.
 - 🧟 **30 Monster Families:** Ogres, hydras, dragons, necromancers, demonesses, faeries, mummies, wraiths, goblins, skeletons, wolves, tentacle horrors, and more. Features state-machine AI with patrol, pursuit, melee attacks, and ranged spellcasting.
 - 💡 **Godot Forward+ 3D Rendering:** Dynamic lighting with flickering lamp glare, normal map support (`ds_normal_maps` shader global), particle effects for blood splatters and spell bursts, and atmospheric distance fog.
-- 🧭 **Retro HUD & Radar Minimap:** Circular real-time radar minimap tracking surrounding walls, monsters, and loot. Polished HUD displaying health, XP, dungeon depth, kill counts, and active equipment.
+- 🧭 **Retro HUD & Radar Minimap:** Follow the blue arrow on the rim toward the exit portal. When you get close, it becomes a pulsing blue target at the portal's map location. Both appear above walls, loot, enemies, and the player marker.
 - 💾 **Persistent Adventure State:** Automatically saves run progress to `user://` — slain monsters, looted chests, unlocked doors, and player stats persist across sessions and depth transitions.
 - 🎮 **Full Input & Controller Support:** Native keyboard/mouse and gamepad support (Xbox, PlayStation DualSense/DualShock, Nintendo Switch Pro) with analog movement, stick aiming, haptics/rumble, and menu navigation.
 
@@ -142,6 +142,8 @@ godot --xr-mode off --path . --rendering-method gl_compatibility -s res://tests/
 ---
 
 ## 🎮 Controls
+
+In Options, a light outline with an empty center means the setting is off. An amber box with a check mark means it is on. The focus outline surrounds the whole row and is separate from the check mark.
 
 ### Keyboard & Mouse
 

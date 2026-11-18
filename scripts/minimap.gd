@@ -10,6 +10,9 @@ const REDRAW_INTERVAL := 1.0 / 30.0
 const FLOOR_COLOR := Color("#1f3050")
 const WALL_COLOR := Color("#9fb3cf")
 const WALL_WIDTH := 7.5 # 1.5 px on the browser's 200 px / 1000 unit tiles
+const PORTAL_BLUE := Color("#38bdf8")
+const PORTAL_BACK := Color("#071426")
+const PORTAL_RING := Color("#d5f5ff")
 
 var game # Game
 var _level_mesh: ArrayMesh = null
@@ -168,30 +171,6 @@ func _draw() -> void:
 	_dots(game.monsters, 4.0 * dot, sc, center, Color("#ef4444"),
 		func(m): return m.state == Monster.State.CHASE or m.state == Monster.State.ATTACK)
 
-	# Exit portals: pulse on the map, or point toward them from the rim when out of view.
-	var now := Time.get_ticks_msec()
-	var pulse := 0.5 + 0.5 * sin(now / 250.0)
-	var rim := c - 10.0 * dot
-	for tp: Dictionary in game.active_teleporters:
-		var tpos: Vector3 = tp.position
-		var dx := tpos.x - px
-		var dz := tpos.z - pz
-		var dist := sqrt(dx * dx + dz * dz)
-		if dist * sc < rim:
-			var p := center + Vector2(dx, dz) * sc
-			draw_arc(p, (4.0 + 3.0 * pulse) * dot, 0.0, TAU, 24, Color("#e0f2fe"), 1.5 * dot, true)
-			draw_circle(p, 3.0 * dot, Color("#38bdf8"))
-		else:
-			var ang := atan2(dz, dx)
-			var e := center + Vector2(cos(ang), sin(ang)) * rim
-			var tri := PackedVector2Array([
-				e + Vector2(cos(ang), sin(ang)) * 6.0 * dot,
-				e + Vector2(cos(ang + 2.4), sin(ang + 2.4)) * 5.0 * dot,
-				e + Vector2(cos(ang - 2.4), sin(ang - 2.4)) * 5.0 * dot])
-			var col := Color("#38bdf8")
-			col.a = 0.6 + 0.4 * pulse
-			draw_colored_polygon(tri, col)
-
 	# Player marker and view cone. Canvas angle: +X right (0 rad), +Z down (PI/2 rad).
 	var cos_pitch := cos(_pitch)
 	var angle := atan2(-cos(_yaw) * cos_pitch, -sin(_yaw) * cos_pitch)
@@ -212,3 +191,28 @@ func _draw() -> void:
 	var fs := roundi(9.0 * dot)
 	var tw := _font.get_string_size("N", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	draw_string(_font, Vector2(c - tw / 2.0, 14.0 * dot), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("#ef4444"))
+	_draw_exit_portals(center, sc, dot)
+
+
+func _draw_exit_portals(center: Vector2, sc: float, dot: float) -> void:
+	# Keep the entire badge inside the circular clip, even on a diagonal bearing.
+	var rim := center.x - 15.0 * dot
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 250.0)
+	for tp: Dictionary in game.active_teleporters:
+		var pos: Vector3 = tp.position
+		var offset := Vector2(pos.x - _player_pos.x, pos.z - _player_pos.z) * sc
+		if offset.length_squared() < rim * rim:
+			var p := center + offset
+			draw_circle(p, 10.0 * dot, PORTAL_BACK, true, -1, true)
+			draw_arc(p, (7.0 + 1.5 * pulse) * dot, 0.0, TAU, 32, PORTAL_RING, 2.0 * dot, true)
+			draw_circle(p, 4.5 * dot, PORTAL_BLUE, true, -1, true)
+		else:
+			var dir := offset.normalized()
+			var p := center + dir * rim
+			draw_circle(p, 12.0 * dot, PORTAL_BACK, true, -1, true)
+			draw_arc(p, 11.5 * dot, 0.0, TAU, 32, PORTAL_RING, 1.5 * dot, true)
+			draw_set_transform(p, dir.angle(), Vector2.ONE * dot)
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(10, 0), Vector2(0, -8), Vector2(0, -3.5), Vector2(-8, -3.5),
+				Vector2(-8, 3.5), Vector2(0, 3.5), Vector2(0, 8)]), PORTAL_BLUE)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
