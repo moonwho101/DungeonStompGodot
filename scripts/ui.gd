@@ -88,6 +88,8 @@ var _opt_music: CheckBox
 var _opt_vibration: CheckBox
 var _opt_invert: CheckBox
 var _opt_hud: CheckBox
+var _opt_god: CheckBox
+var _opt_fly: CheckBox
 var _opt_sens: HSlider
 var _opt_sens_val: Label
 var _btn_fullscreen: Button
@@ -746,6 +748,9 @@ func _build_menu(root: Control) -> void:
 	_btn_options = _menu_button("Options")
 	for b in [_btn_new, _btn_resume, _btn_generator, _btn_options]:
 		main.add_child(b)
+	var exit_button := _menu_button("Exit Game")
+	exit_button.pressed.connect(func(): game.quit_game())
+	main.add_child(exit_button)
 	_status = _label("", _font, 17, Color("#38bdf8"))
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main.add_child(_status)
@@ -794,7 +799,9 @@ func _build_menu(root: Control) -> void:
 	_opt_vibration = _checkbox("Controller Vibration (Rumble)")
 	_opt_invert = _checkbox("Invert Look Y")
 	_opt_hud = _checkbox("Show Player HUD (H)")
-	for c in [_opt_normal, _opt_music, _opt_hud, _opt_vibration, _opt_invert]:
+	_opt_god = _checkbox("God Mode (Invincibility)")
+	_opt_fly = _checkbox("Fly Mode")
+	for c in [_opt_normal, _opt_music, _opt_hud, _opt_vibration, _opt_invert, _opt_god, _opt_fly]:
 		opts.add_child(c)
 	var sens_row := _field_label("Controller Sensitivity:", "2.8")
 	opts.add_child(sens_row[0])
@@ -817,6 +824,10 @@ func _build_menu(root: Control) -> void:
 	_btn_gen_back.pressed.connect(_on_back)
 	_btn_opt_back.pressed.connect(_on_back)
 	_btn_fullscreen.pressed.connect(_on_fullscreen)
+	_opt_god.toggled.connect(func(on: bool):
+		if on != game.is_invincible:
+			game.toggle_god_mode())
+	_opt_fly.toggled.connect(func(on: bool): game.toggle_fly_mode(on))
 	_opt_normal.toggled.connect(func(on: bool):
 		if not _syncing:
 			game.set_normal_maps_enabled(on)
@@ -918,6 +929,8 @@ func _update_fullscreen_button() -> void:
 
 func sync_options() -> void:
 	_syncing = true
+	_opt_god.set_pressed_no_signal(game.is_invincible)
+	_opt_fly.set_pressed_no_signal(game.fly_mode)
 	_opt_normal.button_pressed = game.normal_maps_enabled
 	_opt_music.button_pressed = game.audio.is_music_on()
 	_opt_vibration.button_pressed = game.gamepad.vibration_enabled

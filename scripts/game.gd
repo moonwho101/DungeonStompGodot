@@ -8,9 +8,9 @@ const PLAYER_GUNS := ["AXE", "FLAMESWORD", "BASTARDSWORD", "BATTLEAXE", "ICESWOR
 const SPELL_NAMES := ["MAGIC MISSILE", "FIREBALL", "LIGHTNING", "HEALING"]
 const DEFAULT_WEAPONS := ["AXE", "MAGIC MISSILE", "FIREBALL", "LIGHTNING", "HEALING"]
 const WEAPON_DAMAGE := {
-	"AXE": 5, "FLAMESWORD": 5, "BASTARDSWORD": 8, "BATTLEAXE": 10, "ICESWORD": 12, "LIGHTNINGSWORD": 14,
-	"MORNINGSTAR": 16, "SPIKEDFLAIL": 18, "SPLITSWORD": 19, "SUPERFLAMESWORD": 20,
-	"MAGIC MISSILE": 5, "FIREBALL": 10, "LIGHTNING": 15, "HEALING": 0,
+	"AXE": 2, "FLAMESWORD": 3, "BASTARDSWORD": 4, "BATTLEAXE": 5, "ICESWORD": 6, "LIGHTNINGSWORD": 7,
+	"MORNINGSTAR": 8, "SPIKEDFLAIL": 9, "SPLITSWORD": 10, "SUPERFLAMESWORD": 11,
+	"MAGIC MISSILE": 2, "FIREBALL": 4, "LIGHTNING": 8, "HEALING": 0,
 }
 const TREASURE_DROPS := ["POTION", "cheese1", "GOBLET", "pot1", "pot2", "pot3", "mushroom", "COIN", "SPELLBOOK",
 	"SCROLL-HEALING-", "SCROLL-MAGICMISSLE-", "SCROLL-FIREBALL-", "SCROLL-LIGHTNING-"]
@@ -438,6 +438,12 @@ func release_inputs() -> void:
 	move_up = false
 	move_down = false
 	is_sprinting = false
+
+
+func quit_game() -> void:
+	if game_started:
+		save_current_run()
+	get_tree().quit()
 
 
 func _notification(what: int) -> void:

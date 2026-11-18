@@ -145,6 +145,8 @@ godot --xr-mode off --path . --rendering-method gl_compatibility -s res://tests/
 
 In Options, a light outline with an empty center means the setting is off. An amber box with a check mark means it is on. The focus outline surrounds the whole row and is separate from the check mark.
 
+Open **Options** during a run to toggle **God Mode** (invincibility) or **Fly Mode**. These match the gameplay shortcuts and reset when you start a new game. Choose **Exit Game** from the main or pause menu to close the game; quitting a started run saves it for **Resume**.
+
 ### Keyboard & Mouse
 
 | Key / Input | Action |
