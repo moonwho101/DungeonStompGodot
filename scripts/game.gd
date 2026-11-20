@@ -1317,7 +1317,7 @@ func _process(delta: float) -> void:
 		xr_rig.begin_frame(dt, gp)
 	_update_player_movement(dt, gp)
 	if xr_rig != null:
-		xr_rig.sync_body(delta, true)
+		xr_rig.sync_body(dt, true)
 
 	var pos := camera.position
 	_pos_display_timer += delta

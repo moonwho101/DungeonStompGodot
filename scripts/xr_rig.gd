@@ -18,7 +18,6 @@ const SWING_END_SPEED := 0.8 * UNITS_PER_METER # swing ends when the hand slows 
 const SWING_MIN_TRAVEL := 0.2 * UNITS_PER_METER # hand must travel this far above start speed before it counts
 const SWING_MAX_WINDUP := 0.3 # seconds; slower build-ups than this aren't a swing
 const SWING_SPEED_SMOOTHING := 0.035 # seconds; filters tracking jitter / one-frame spikes
-const SWING_MAX_SAMPLE_GAP := 0.1 # don't infer a blade path across a tracking stall
 const SWING_COOLDOWN := 0.3 # seconds after a swing ends before another can start
 const HIT_PADDING := 6.0 # inflates monster boxes for blade hit tests
 const LASER_LENGTH := 4.0 * UNITS_PER_METER
@@ -79,9 +78,8 @@ var _panel_was_menu := false
 var _hud_yaw := INF
 var _hud_following := true
 var _prev_tip_origin := Vector3.ZERO
-var _prev_pommel_origin := Vector3.ZERO
 var _prev_hand_rel := Vector3.ZERO
-var _hand_velocity := Vector3.ZERO
+var _hand_speed := 0.0
 var _has_prev_tip := false
 var _pointer_pressed := false
 var _hit_this_swing: Array = []
@@ -380,9 +378,9 @@ static func new_swing_state() -> Dictionary:
 	return {"phase": SwingPhase.IDLE, "travel": 0.0, "time": 0.0, "cooldown": 0.0}
 
 
-# Filter before taking the magnitude so alternating tracking noise cancels rather than accumulating travel.
-static func smooth_hand_velocity(current: Vector3, displacement: Vector3, delta: float) -> Vector3:
-	return current.lerp(displacement / delta, 1.0 - exp(-delta / SWING_SPEED_SMOOTHING))
+# Exponential smoothing of the measured speed so single-frame tracking spikes are ignored.
+static func smooth_speed(current: float, raw: float, delta: float) -> float:
+	return lerpf(current, raw, 1.0 - exp(-delta / SWING_SPEED_SMOOTHING))
 
 
 # Advances the swing state machine for the current (smoothed) hand speed in units/s.
@@ -419,86 +417,54 @@ static func swing_step(state: Dictionary, speed: float, delta: float) -> String:
 	return ""
 
 
-# Approximate the swept blade by two triangles between successive tracked poses.
-static func blade_hits_box(box_min: Vector3, box_max: Vector3, pad: float, pommel: Vector3, tip: Vector3, prev_pommel: Vector3, prev_tip: Vector3) -> bool:
+# True when the blade (pommel -> tip) or the tip's sweep since last frame touches the padded box.
+static func blade_hits_box(box_min: Vector3, box_max: Vector3, pad: float, pommel: Vector3, tip: Vector3, prev_tip: Vector3) -> bool:
 	if box_max.x < box_min.x or box_max.y < box_min.y or box_max.z < box_min.z:
 		return false
 	var box := AABB(box_min - Vector3.ONE * pad, box_max - box_min + Vector3.ONE * pad * 2.0)
-	var sweep_min := pommel.min(tip).min(prev_pommel).min(prev_tip)
-	var sweep_max := pommel.max(tip).max(prev_pommel).max(prev_tip)
-	if (sweep_min.x > box.end.x or sweep_max.x < box.position.x
-		or sweep_min.y > box.end.y or sweep_max.y < box.position.y
-		or sweep_min.z > box.end.z or sweep_max.z < box.position.z):
-		return false
-	var center := box.get_center()
-	var half_size := box.size * 0.5
-	return (_triangle_hits_box(prev_pommel - center, prev_tip - center, tip - center, half_size)
-		or _triangle_hits_box(prev_pommel - center, tip - center, pommel - center, half_size))
+	if box.has_point(tip) or box.has_point(pommel):
+		return true
+	return box.intersects_segment(pommel, tip) != null or box.intersects_segment(prev_tip, tip) != null
 
 
-static func _separated(axis: Vector3, a: Vector3, b: Vector3, c: Vector3, half_size: Vector3) -> bool:
-	var r := half_size.dot(axis.abs())
-	var p := axis.dot(a)
-	var q := axis.dot(b)
-	var s := axis.dot(c)
-	return minf(p, minf(q, s)) > r or maxf(p, maxf(q, s)) < -r
-
-
-static func _triangle_hits_box(a: Vector3, b: Vector3, c: Vector3, half_size: Vector3) -> bool:
-	# Separating axes: box faces, triangle normal and each triangle edge crossed with each box axis.
-	var lo := a.min(b).min(c)
-	var hi := a.max(b).max(c)
-	if lo.x > half_size.x or hi.x < -half_size.x or lo.y > half_size.y or hi.y < -half_size.y or lo.z > half_size.z or hi.z < -half_size.z:
-		return false
-	if _separated((b - a).cross(c - a), a, b, c, half_size):
-		return false
-	for edge: Vector3 in [b - a, c - b, a - c]:
-		if (_separated(Vector3(0, edge.z, -edge.y), a, b, c, half_size)
-			or _separated(Vector3(-edge.z, 0, edge.x), a, b, c, half_size)
-			or _separated(Vector3(edge.y, -edge.x, 0), a, b, c, half_size)):
-			return false
-	return true
+# Hand speed relative to the head, so leaning, stepping, smooth turning and locomotion don't count as swinging.
+# Using the hand (not the blade tip, ~0.7 m out) means small wrist turns don't register.
+func _hand_position_from_head() -> Vector3:
+	var inv := origin.global_transform.affine_inverse()
+	return inv * right_grip.global_position - head.position
 
 
 func _update_swing(delta: float, can_hit: bool) -> void:
-	if not can_hit or delta <= 0.0 or delta > SWING_MAX_SAMPLE_GAP or (not simulated and not right_grip.get_has_tracking_data()):
-		_has_prev_tip = false
-		swing_step(swing_state, 0.0, maxf(delta, 0.0))
-		return
-	# Both nodes are children of the XR origin. Keep motion history independent of stick movement and turns.
-	var hand_rel := right_grip.position - head.position
-	var tip_o := right_grip.transform * weapon_tip_local
-	var pommel_o := right_grip.transform * weapon_pommel_local
-	if not _has_prev_tip:
-		_hand_velocity = Vector3.ZERO
-		_prev_hand_rel = hand_rel
+	var hand_xf: Transform3D = (weapon_anchor.get_parent() as Node3D).global_transform
+	var tip_world: Vector3 = hand_xf * weapon_tip_local
+	var pommel_world: Vector3 = hand_xf * weapon_pommel_local
+	var tip_o: Vector3 = origin.global_transform.affine_inverse() * tip_world
+	var hand_rel := _hand_position_from_head()
+	if not _has_prev_tip or delta <= 0.0:
 		_prev_tip_origin = tip_o
-		_prev_pommel_origin = pommel_o
+		_prev_hand_rel = hand_rel
+		_hand_speed = 0.0
 		_has_prev_tip = true
 		return
-	_hand_velocity = smooth_hand_velocity(_hand_velocity, hand_rel - _prev_hand_rel, delta)
-	var speed := _hand_velocity.length()
-	var tip_world := origin.global_transform * tip_o
-	var pommel_world := origin.global_transform * pommel_o
+	var raw_speed: float = (hand_rel - _prev_hand_rel).length() / delta
+	_hand_speed = smooth_speed(_hand_speed, raw_speed, delta)
 	var prev_tip_world: Vector3 = origin.global_transform * _prev_tip_origin
-	var ev := swing_step(swing_state, speed, delta)
+	var ev := swing_step(swing_state, _hand_speed if can_hit else 0.0, delta)
 	if ev == "start":
 		_hit_this_swing.clear()
-		game.on_xr_swing_started(speed / SWING_START_SPEED)
+		game.on_xr_swing_started(_hand_speed / SWING_START_SPEED)
 		haptic(40, 0.25)
-	if swing_state.phase == SwingPhase.SWING:
-		var prev_pommel_world := origin.global_transform * _prev_pommel_origin
+	if swing_state.phase == SwingPhase.SWING and can_hit:
 		var dir: Vector3 = tip_world - prev_tip_world
 		dir = dir.normalized() if dir.length_squared() > 1e-6 else -head.global_basis.z
 		for m in game.monsters:
 			if m.dead or m.health <= 0.0 or m in _hit_this_swing:
 				continue
-			if blade_hits_box(m.bbox.min, m.bbox.max, HIT_PADDING, pommel_world, tip_world, prev_pommel_world, prev_tip_world):
+			if blade_hits_box(m.bbox.min, m.bbox.max, HIT_PADDING, pommel_world, tip_world, prev_tip_world):
 				_hit_this_swing.append(m)
 				game.apply_melee_hit(m, dir)
 				haptic(120, 0.9)
 	_prev_tip_origin = tip_o
-	_prev_pommel_origin = pommel_o
 	_prev_hand_rel = hand_rel
 
 # ---------------------------------------------------------------- Input
@@ -646,7 +612,7 @@ func sync_body(delta: float, playing: bool) -> void:
 	origin.global_position = o
 	cam.basis = head.global_basis.orthonormalized()
 	_written_yaw = cam.rotation.y
-	_place_ui_panel(minf(delta, 0.1) if playing else delta)
+	_place_ui_panel(delta)
 	if weapon_anchor.get_child_count() > 0:
 		_update_swing(delta, playing and not game.player_dead and game.is_melee_weapon())
 	else:
