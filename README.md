@@ -207,6 +207,8 @@ When an OpenXR runtime with a connected headset is available (SteamVR, Meta Ques
 
 In VR the player weapon (an MD2 model) is drawn in one fixed pose, held in your right hand. It never plays its MD2 animations; your controller moves it. Melee weapons hit by **physically swinging** them into monsters (one hit per monster per swing). Spells fire from where the right controller points.
 
+Swing detection filters back-and-forth controller jitter before measuring hand speed. During a swing the game checks where the whole blade passed between tracked poses, so a fast cut can connect even when neither endpoint touches the monster. After a tracking interruption, melee resumes from a fresh pose rather than sweeping across the gap.
+
 | VR Input | Action |
 |----------|--------|
 | **Swing right controller** | Melee attack (axes and swords) |

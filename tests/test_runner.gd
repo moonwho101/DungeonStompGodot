@@ -514,12 +514,21 @@ func _xr_tests(models: Parsers.ModelListParser) -> void:
 	for p in _swing_path(0.6, 0.22, dt):
 		two.append(Vector3(0.6 * m, 0, 0) - p) # swing back the other way
 	check(_count_swings(two, dt) == 2, "two real swings half a second apart play two swings")
+	for hz: float in [72.0, 80.0, 90.0, 120.0]:
+		var step := 1.0 / hz
+		var chatter := PackedVector3Array()
+		for i in 60:
+			chatter.append(Vector3.RIGHT * m * (0.015 if i % 2 == 0 else -0.015))
+		check(_count_swings(chatter, step) == 0 and _count_swings(_swing_path(0.6, 0.22, step), step) == 1,
+			"alternating tracking noise is rejected and a deliberate swing counts once at %d Hz" % hz)
 
 	var bmin := Vector3(-20, 0, -20)
 	var bmax := Vector3(20, 80, 20)
-	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(-10, 40, 0), Vector3(-10, 40, 0)), "blade inside monster box hits")
-	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(-10, 40, 40), Vector3(-10, 40, -40)), "tip sweep through box hits")
-	check(not XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-90, 40, 0), Vector3(-40, 40, 0), Vector3(-40, 50, 0)), "blade outside box misses")
+	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(-10, 40, 0), Vector3(-60, 40, 0), Vector3(-10, 40, 0)), "blade inside monster box hits")
+	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(-10, 40, 40), Vector3(-60, 40, 0), Vector3(-10, 40, -40)), "tip sweep through box hits")
+	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-50, 40, 35), Vector3(50, 40, 35), Vector3(-50, 40, -35), Vector3(50, 40, -35)), "middle of blade crossing between samples hits")
+	check(not XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-90, 40, 0), Vector3(-40, 40, 0), Vector3(-90, 50, 0), Vector3(-40, 50, 0)), "blade outside box misses")
+	check(not XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(0, 40, 60), Vector3(-65, 40, 0), Vector3(-5, 40, 60)), "diagonal sweep misses despite overlapping bounding boxes")
 
 	var merged := XRRig.merge_input({"move_x": 0.5, "jump": false}, {"move_x": 0.8, "jump": true, "turn": 0.3})
 	check(is_equal_approx(merged.move_x, 1.0) and merged.jump and is_equal_approx(merged.turn, 0.3), "gamepad and XR input merge")
@@ -549,10 +558,10 @@ func _swing_path(meters: float, seconds: float, dt: float) -> PackedVector3Array
 # Runs a hand path through the same smoothing + state machine XRRig uses and counts swing sounds.
 func _count_swings(path: PackedVector3Array, dt: float) -> int:
 	var state := XRRig.new_swing_state()
-	var speed := 0.0
+	var velocity := Vector3.ZERO
 	var starts := 0
 	for i in range(1, path.size()):
-		speed = XRRig.smooth_speed(speed, (path[i] - path[i - 1]).length() / dt, dt)
-		if XRRig.swing_step(state, speed, dt) == "start":
+		velocity = XRRig.smooth_hand_velocity(velocity, path[i] - path[i - 1], dt)
+		if XRRig.swing_step(state, velocity.length(), dt) == "start":
 			starts += 1
 	return starts
