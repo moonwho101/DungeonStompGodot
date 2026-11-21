@@ -42,6 +42,11 @@ func _run_tests() -> void:
 	var goblin := models.get_model_by_name("GOBLIN")
 	check(goblin != null and goblin.is_md2() and goblin.monster_weapon == "GOBLINAXE", "modellist GOBLIN entry")
 
+	for m_name in ["FULIMO", "OKTA", "SORB"]:
+		var cfg := Monster.get_config(m_name)
+		check(cfg.canCastSpells == true and cfg.spells.size() > 0 and cfg.attackRange > 100.0 and cfg.stopDistance > 100.0 and cfg.spellCooldown > 0.0,
+			"%s spellcaster config" % m_name)
+
 	var level := Parsers.LevelMapParser.new()
 	level.parse_file("bin/level1.map")
 	check(level.instances.size() == 1991, "level1.map instances (%d)" % level.instances.size())
@@ -68,11 +73,22 @@ func _run_tests() -> void:
 	check(md2 != null and md2.frame_count >= 198, "goblin.md2 loads with all frames")
 	_fall_and_attack_tests(md2)
 	_monster_movement_tests(md2)
+	_spell_cadence_test(md2)
+	_monster_gesture_tests(md2)
+	_monster_personality_tests(md2)
 	var chest := TDSModel.load_for_def(models.get_model_by_name("cdoorclosedchest"))
 	check(chest != null and chest.has_geometry, "chest .3ds loads")
 
 	var wav := AudioManager.load_wav(FileAccess.get_file_as_bytes(DataPaths.path("Sounds/swish8.wav")))
 	check(wav != null and wav.data.size() > 0, "IMA-ADPCM wav decodes")
+	for file: String in Game.DOOR_OPEN_SOUNDS:
+		var slide := AudioManager.load_wav(FileAccess.get_file_as_bytes(DataPaths.path("Sounds/" + file)))
+		check(slide != null and slide.get_length() > 0 and slide.loop_mode == AudioStreamWAV.LOOP_DISABLED,
+			"door slide decodes for one-shot playback: " + file)
+
+	_xr_tests(models)
+	_effect_pool_tests()
+
 	TDSModel.clear_cache()
 	MD2Model.clear_cache()
 	Materials.clear_caches()
@@ -81,8 +97,34 @@ func _run_tests() -> void:
 	quit(1 if _failures > 0 else 0)
 
 
+func _effect_pool_tests() -> void:
+	var fx := Effects.new()
+	root.add_child(fx)
+	for i in 2:
+		var life := 0.01 if i == 0 else 1.0
+		fx.emit_particle(i, 10, 0, 0, 0, 0, 0xff0000, 2, life)
+		fx._emit_blood(i, 10, 0, 0, 0, 0, 1, 0, 0, 1, 2, life, 0, 0, 0, 1, 0, false)
+	fx.update_pickup_effects(0.02)
+	check(fx._p_mm.visible_instance_count == 1 and fx._p_buf[3] == 1.0,
+		"only surviving spark is submitted, with its own transform")
+	check(fx._b_mm.visible_instance_count == 1 and fx._b_buf[3] == 1.0 and fx._b_buf[16] == 1.0,
+		"only surviving blood instance is submitted, with its own transform and softness")
+	fx.add_explosion_flash(Vector3.ZERO, 0xffffff, 100)
+	var flash: Effects.LightSlot = fx.explosion_flashes[0].slot
+	fx.create_floating_text("pickup", Vector3.ZERO, "#ffffff")
+	fx.clear_world_effects()
+	fx.update_pickup_effects(0.01)
+	check(not flash.busy and fx.floating_texts.is_empty() and fx.explosion_flashes.is_empty()
+		and fx._p_mm.visible_instance_count == 0 and fx._b_mm.visible_instance_count == 0,
+		"changing worlds releases transient effects immediately")
+	fx.free()
+
+
 class QuietAudio:
 	extends RefCounted
+
+	func play_world_sound(_file: String, _position: Vector3, _volume: float, _warning := false) -> void:
+		pass
 
 	func play_sound(_file: String, _volume: float) -> void:
 		pass
@@ -90,10 +132,14 @@ class QuietAudio:
 
 class QuietEffects:
 	extends RefCounted
+	var texts: Array[String] = []
 
 	func emit_particle(_x: float, _y: float, _z: float, _vx: float, _vy: float, _vz: float,
 			_color: int, _size: float, _life: float) -> void:
 		pass
+
+	func create_floating_text(text: String, _pos: Vector3, _css: String = "") -> void:
+		texts.append(text)
 
 
 class MonsterTestGame:
@@ -115,6 +161,9 @@ class MonsterTestGame:
 
 	func damage_player(amount: float) -> void:
 		damage += amount
+
+	func vibrate(_ms: int, _weak: float, _strong: float) -> void:
+		pass
 
 	func launch_monster_projectile(_monster: Monster, _spell: String, _target: Vector3) -> void:
 		shots += 1
@@ -199,13 +248,13 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		and monster.bbox.is_empty(), "fallen corpse is recovered without resurrection")
 
 	var melee := _test_monster(game, model, "GOBLIN")
-	for height in [300.0, -300.0, 0.0]:
-		game.target = Vector3(80, 100 + height, 0)
+	for height in [300.0, -300.0, 70.0, 0.0]:
+		game.target = Vector3(0 if height == 70.0 else 80, 100 + height, 0)
 		melee.set_state(Monster.State.CHASE)
 		melee.update(0.0, game.target)
 		check((melee.state == Monster.State.ATTACK) == (height == 0.0),
 			"melee attack entry respects vertical range (height %.0f)" % height)
-	for height in [136.0, -136.0, 135.0, -135.0, 0.0]:
+	for height in [65.0, -65.0, 64.0, -64.0, 0.0]:
 		game.target = Vector3(0, 100 + height, 0)
 		melee.set_state(Monster.State.CHASE)
 		melee.set_state(Monster.State.ATTACK)
@@ -213,8 +262,20 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		melee.anim_timer = 0.4
 		game.damage = 0.0
 		melee.update(0.0, game.target)
-		check((game.damage > 0.0) == (absf(height) <= 135.0),
+		check((game.damage > 0.0) == (absf(height) <= Monster.MELEE_VERTICAL_REACH),
 			"melee impact rechecks height after windup (height %.0f)" % height)
+	var walled := MonsterTestGame.new()
+	walled.collision.add_triangle(Vector3(50, -200, -200), Vector3(50, 400, -200), Vector3(50, 400, 200))
+	walled.collision.add_triangle(Vector3(50, -200, -200), Vector3(50, 400, 200), Vector3(50, -200, 200))
+	walled.collision.build_grid()
+	walled.target = Vector3(100, 100, 0)
+	var blocked := _test_monster(walled, model, "GOBLIN")
+	blocked.set_state(Monster.State.ATTACK)
+	blocked.set_animation(Monster.ANIMS.ATTACK, true)
+	blocked.anim_timer = 0.4
+	blocked.update(0.0, walled.target)
+	check(walled.damage == 0.0, "melee impact needs line of sight to the player")
+	walled.world_root.free()
 
 	var caster := _test_monster(game, model, "SORCERER")
 	for height in [651.0, -651.0, 0.0]:
@@ -232,6 +293,126 @@ func _fall_and_attack_tests(model: MD2Model) -> void:
 		caster.update(0.0, game.target)
 		check((game.shots == 1) == (height == 0.0),
 			"spell release rechecks height after windup (height %.0f)" % height)
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _monster_gesture_tests(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	var m := _test_monster(game, model, "GOBLIN")
+	var seen := {}
+	seed(8123)
+	m.gesture_timer = 1.0
+	for i in 2000 * 30:
+		m._active_animation(Monster.ANIMS.RUN, 1.0 / 30, 300.0)
+		if not m.current_anim.loop:
+			seen[m.current_anim.name] = true
+			m.set_animation(Monster.ANIMS.RUN, true)
+	check(seen.size() == 5, "all five monster gestures are reachable")
+	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(0, 0, 500), Vector3(500, 0, -500))
+	game.collision.build_grid()
+	game.target = Vector3(0, 100, 400)
+	m.set_state(Monster.State.CHASE)
+	for gesture: String in Monster.GESTURES:
+		m.gesture_timer = 1.0
+		m.set_animation(Monster.ANIMS[gesture], true)
+		var start := Vector2(m.position.x, m.position.z)
+		var held := true
+		for i in 45:
+			if m.anim_complete:
+				break
+			m.update(0.05, game.target)
+			held = held and Vector2(m.position.x, m.position.z).is_equal_approx(start)
+		check(held and m.anim_complete, "monster stays in place for the whole " + gesture)
+		m.update(0.05, game.target)
+		check(m.current_anim.name == "RUN" and m.position.z > start.y, "pursuit resumes after " + gesture)
+	m.set_animation(Monster.ANIMS.WAVE, true)
+	game.target = m.position + Vector3(0, 50, 60)
+	m.update(0.0, game.target)
+	m.update(0.0, game.target)
+	check(m.state == Monster.State.ATTACK and m.current_anim.name == "ATTACK", "attacking interrupts an unfinished wave")
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _monster_personality_tests(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	game.fall_recovery_y = -100000.0
+	game.collision.add_triangle(Vector3(-3000, 0, -3000), Vector3(-3000, 0, 3000), Vector3(3000, 0, 3000))
+	game.collision.add_triangle(Vector3(-3000, 0, -3000), Vector3(3000, 0, 3000), Vector3(3000, 0, -3000))
+	game.collision.build_grid()
+	game.target = Vector3(0, 100, 300)
+
+	var m := _test_monster(game, model, "BAUUL")
+	var base_hp: int = m._base_config.maxHealth
+	var base_speed: float = m._base_config.moveSpeed
+	check(m.personality == "BRUTE" and m.config.maxHealth > base_hp and m.config.moveSpeed < base_speed
+		and m.health == m.config.maxHealth and m._hp_trait.visible and m._hp_trait.text == "BRUTE",
+		"family config gives BAUUL the tougher, slower, labelled brute personality")
+	m.set_personality("")
+	check(m.config.maxHealth == base_hp and m.config.moveSpeed == base_speed and not m._hp_trait.visible,
+		"clearing personality restores family stats")
+	check(_test_monster(game, model, "GOBLIN").personality == "COWARD" and _test_monster(game, model, "").personality == "",
+		"personality comes from the family config; unknown models have none")
+
+	var coward := _test_monster(game, model, "GOBLIN")
+	coward.set_state(Monster.State.CHASE)
+	coward.take_damage(coward.config.maxHealth * 0.7)
+	var start_z := coward.position.z
+	for i in 40:
+		coward.update(0.05, game.target)
+	check(coward.state == Monster.State.FLEE and coward.position.z < start_z - 100.0, "wounded coward flees from the player")
+	for i in 80:
+		coward.update(0.05, game.target)
+	check(coward.state == Monster.State.CHASE or coward.state == Monster.State.ATTACK, "coward returns to the fight after fleeing")
+	coward.take_damage(0.5)
+	for i in 20:
+		coward.update(0.05, game.target)
+	check(coward.state != Monster.State.FLEE, "coward only flees once")
+
+	var berserker := _test_monster(game, model, "DEMON")
+	var calm_speed: float = berserker.config.moveSpeed
+	berserker.take_damage(berserker.config.maxHealth * 0.3)
+	check(not berserker.enraged, "berserker stays calm above half health")
+	berserker.take_damage(berserker.config.maxHealth * 0.3)
+	check(berserker.enraged and berserker.config.moveSpeed > calm_speed and game.fx.texts.has("ENRAGED!"),
+		"berserker enrages below half health")
+
+	var leader := _test_monster(game, model, "WOLF")
+	var near := _test_monster(game, model, "GOBLIN")
+	near.position = leader.position + Vector3(300, 0, 0)
+	var far := _test_monster(game, model, "GOBLIN")
+	far.position = leader.position + Vector3(2000, 0, 0)
+	game.monsters = [leader, near, far]
+	leader.set_state(Monster.State.ALERT)
+	check(near.state == Monster.State.ALERT and far.state == Monster.State.IDLE, "pack leader rallies only nearby idle monsters")
+
+	var restored := _test_monster(game, model, "DEMON")
+	restored.restore_snapshot({"x": 0, "y": 50, "z": 0, "r": 0.0, "hp": 1.0, "d": 0})
+	check(restored.personality == "BERSERKER" and restored.enraged and restored.health == 1.0,
+		"restored wounded berserker is still enraged")
+	game.monsters.clear()
+	game.world_root.free()
+	Monster.clear_shared()
+
+
+func _spell_cadence_test(model: MD2Model) -> void:
+	var game := MonsterTestGame.new()
+	game.target = Vector3(0, 100, 400)
+	game.collision.add_triangle(Vector3(-500, 0, -500), Vector3(0, 0, 500), Vector3(500, 0, -500))
+	game.collision.build_grid()
+	var shots: Array[int] = []
+	# All three families have the same base cooldown. Count actual releases at a fixed range.
+	for family in ["OKTA", "WRAITH", "NECROMANCER"]:
+		var m := _test_monster(game, model, family)
+		m.config.moveSpeed = 0.0
+		m.set_state(Monster.State.CHASE)
+		game.shots = 0
+		for i in 60 * 30:
+			m.update(1.0 / 60.0, game.target)
+		shots.append(game.shots)
+	check(shots[0] == 12 and shots[1] >= shots[0] * 1.4 and shots[2] >= shots[0] * 2.0,
+		"30-second ranged casts: basic %d, heavy %d, savage %d" % shots)
 	game.world_root.free()
 	Monster.clear_shared()
 
@@ -282,3 +463,96 @@ func _monster_movement_tests(model: MD2Model) -> void:
 			"subdivided strafing preserves movement speed at %d FPS" % fps)
 	game.world_root.free()
 	Monster.clear_shared()
+
+
+# VR logic that doesn't need a headset: fixed weapon pose, grip fit, swing detection and blade hits.
+func _xr_tests(models: Parsers.ModelListParser) -> void:
+	var axe_def := models.get_model_by_name("AXE")
+	var axe := MD2Model.load_for_def(axe_def)
+	var fit := XRRig.weapon_fit(axe, axe_def.name, axe_def.scale)
+	var tip: Vector3 = fit.tip
+	var pommel: Vector3 = fit.pommel
+	check(tip.z < -20.0 and Vector2(tip.x, tip.y).length() < 0.5, "XR weapon tip points along grip -Z (%s)" % tip)
+	check(pommel.z > 0.0 and Vector2(pommel.x, pommel.y).length() < 0.5, "XR weapon pommel sits behind the hand (%s)" % pommel)
+
+	var rig := XRRig.new()
+	rig.weapon_anchor = Node3D.new()
+	var mesh := axe.create_instance(axe_def.texture_alias)
+	Materials.set_instance_parameter(mesh, "frames", Vector4(7, 8, 0, 0))
+	Materials.set_instance_parameter(mesh, "weights", Vector4(0.5, 0.5, 0, 0))
+	rig.attach_weapon(mesh, axe, axe_def.name, axe_def.scale)
+	check(_instance_parameter(mesh, "frames") == Vector4.ZERO
+		and _instance_parameter(mesh, "weights") == Vector4(1, 0, 0, 0), "XR weapon is held in fixed frame-0 pose")
+	var other := axe.create_instance(axe_def.texture_alias)
+	axe.set_pose(other, [7], [1.0])
+	check(_instance_parameter(other, "frames") == Vector4(7, 0, 0, 0)
+		and _instance_parameter(mesh, "frames") == Vector4.ZERO, "MD2 instances keep independent poses")
+	other.free()
+	check(mesh.get_parent() == rig.weapon_anchor, "XR weapon parented to the controller anchor")
+	rig.weapon_anchor.free()
+	rig.free()
+
+	var dt := 1.0 / 90.0
+	var m := XRRig.UNITS_PER_METER
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1234
+	var jitter := PackedVector3Array()
+	for i in 270:
+		jitter.append(Vector3(rng.randf_range(-0.002, 0.002), rng.randf_range(-0.002, 0.002), rng.randf_range(-0.002, 0.002)) * m)
+	check(_count_swings(jitter, dt) == 0, "tracking jitter at rest makes no swing sound")
+	var twitch := PackedVector3Array()
+	for i in 90:
+		var off := 0.04 if i % 30 in [10, 11] else 0.0 # 4 cm jerk for two frames, a few times
+		twitch.append(Vector3(off, 0, 0) * m)
+	check(_count_swings(twitch, dt) == 0, "small quick twitches make no swing sound")
+	check(_count_swings(_swing_path(0.5, 1.0, dt), dt) == 0, "slowly repositioning the weapon makes no swing sound")
+	check(_count_swings(_swing_path(0.15, 0.12, dt), dt) == 0, "short flick (15 cm) makes no swing sound")
+	check(_count_swings(_swing_path(0.6, 0.22, dt), dt) == 1, "a real swing (60 cm in 0.22 s) plays exactly one swing")
+	var two := _swing_path(0.6, 0.22, dt)
+	for i in 45:
+		two.append(two[two.size() - 1])
+	for p in _swing_path(0.6, 0.22, dt):
+		two.append(Vector3(0.6 * m, 0, 0) - p) # swing back the other way
+	check(_count_swings(two, dt) == 2, "two real swings half a second apart play two swings")
+
+	var bmin := Vector3(-20, 0, -20)
+	var bmax := Vector3(20, 80, 20)
+	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(-10, 40, 0), Vector3(-10, 40, 0)), "blade inside monster box hits")
+	check(XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-60, 40, 0), Vector3(-10, 40, 40), Vector3(-10, 40, -40)), "tip sweep through box hits")
+	check(not XRRig.blade_hits_box(bmin, bmax, 0.0, Vector3(-90, 40, 0), Vector3(-40, 40, 0), Vector3(-40, 50, 0)), "blade outside box misses")
+
+	var merged := XRRig.merge_input({"move_x": 0.5, "jump": false}, {"move_x": 0.8, "jump": true, "turn": 0.3})
+	check(is_equal_approx(merged.move_x, 1.0) and merged.jump and is_equal_approx(merged.turn, 0.3), "gamepad and XR input merge")
+
+
+func _instance_parameter(instance: GeometryInstance3D, parameter: StringName) -> Variant:
+	if Materials.uses_material_uniforms():
+		return (instance.material_override as ShaderMaterial).get_shader_parameter(parameter)
+	return instance.get_instance_shader_parameter(parameter)
+
+
+# Hand path (relative to the head) moving `meters` along X over `seconds` with an eased (sine) speed profile,
+# padded with a short rest before and after.
+func _swing_path(meters: float, seconds: float, dt: float) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for i in 10:
+		out.append(Vector3.ZERO)
+	var n := maxi(1, roundi(seconds / dt))
+	for i in n + 1:
+		var k := 0.5 - 0.5 * cos(PI * float(i) / n)
+		out.append(Vector3(meters * k * XRRig.UNITS_PER_METER, 0, 0))
+	for i in 20:
+		out.append(out[out.size() - 1])
+	return out
+
+
+# Runs a hand path through the same smoothing + state machine XRRig uses and counts swing sounds.
+func _count_swings(path: PackedVector3Array, dt: float) -> int:
+	var state := XRRig.new_swing_state()
+	var speed := 0.0
+	var starts := 0
+	for i in range(1, path.size()):
+		speed = XRRig.smooth_speed(speed, (path[i] - path[i - 1]).length() / dt, dt)
+		if XRRig.swing_step(state, speed, dt) == "start":
+			starts += 1
+	return starts

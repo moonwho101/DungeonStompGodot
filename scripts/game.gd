@@ -8,9 +8,9 @@ const PLAYER_GUNS := ["AXE", "FLAMESWORD", "BASTARDSWORD", "BATTLEAXE", "ICESWOR
 const SPELL_NAMES := ["MAGIC MISSILE", "FIREBALL", "LIGHTNING", "HEALING"]
 const DEFAULT_WEAPONS := ["AXE", "MAGIC MISSILE", "FIREBALL", "LIGHTNING", "HEALING"]
 const WEAPON_DAMAGE := {
-	"AXE": 5, "FLAMESWORD": 5, "BASTARDSWORD": 8, "BATTLEAXE": 10, "ICESWORD": 12, "LIGHTNINGSWORD": 14,
-	"MORNINGSTAR": 16, "SPIKEDFLAIL": 18, "SPLITSWORD": 19, "SUPERFLAMESWORD": 20,
-	"MAGIC MISSILE": 5, "FIREBALL": 10, "LIGHTNING": 15, "HEALING": 0,
+	"AXE": 4, "FLAMESWORD": 5, "BASTARDSWORD": 6, "BATTLEAXE": 7, "ICESWORD": 8, "LIGHTNINGSWORD": 9,
+	"MORNINGSTAR": 10, "SPIKEDFLAIL": 11, "SPLITSWORD": 12, "SUPERFLAMESWORD": 13,
+	"MAGIC MISSILE": 6, "FIREBALL": 8, "LIGHTNING": 10, "HEALING": 0,
 }
 const TREASURE_DROPS := ["POTION", "cheese1", "GOBLET", "pot1", "pot2", "pot3", "mushroom", "COIN", "SPELLBOOK",
 	"SCROLL-HEALING-", "SCROLL-MAGICMISSLE-", "SCROLL-FIREBALL-", "SCROLL-LIGHTNING-"]
@@ -48,10 +48,15 @@ const SWISH_SOUNDS := ["swish1.wav", "swish4.wav", "swish5.wav", "swish7.wav", "
 const IMPACT_SOUNDS := ["impact.wav", "impact2.wav", "impact3.wav", "impact4.wav", "impact5.wav", "impact6.wav",
 	"impact7.wav", "impact8.wav", "impact10.wav"]
 const PLAYER_IMPACT_SOUNDS := ["pimpact.wav", "ouch.wav", "pain1.wav"]
+const DOOR_OPEN_SOUNDS := ["stone_slides_close.wav", "stoneloop.WAV"]
 const EXCLUDED_IDS := [6, 35, 131, 120]
 const EXCLUDED_NAMES := ["lamp_post", "!monster1", "startpos", "text"]
 const STATIC_CHUNK_SIZE := 1024.0
 const RENDER_DISTANCE := 3000.0
+# Distance culling walks every level object, so it runs a few times per second (or at once after a big move
+# such as a teleport) instead of every frame; objects are culled thousands of units away, so the lag is invisible.
+const CULL_INTERVAL := 0.1
+const CULL_MOVE_DISTANCE := 150.0
 const PLAYER_RESPAWN_DELAY := 3.0
 const PICKUP_DISTANCE := 70.0
 const MOUSE_SENSITIVITY := 0.002
@@ -72,6 +77,7 @@ var gamepad: GamepadInput
 var world_root: Node3D
 var camera: Camera3D
 var environment: Environment
+var xr_rig: XRRig = null # non-null when running in VR through OpenXR
 
 var texture_manager := Parsers.TextureManager.new()
 var objects_parser := Parsers.ObjectsDatParser.new()
@@ -135,6 +141,8 @@ var playing := false
 var teleporter_cooldown := 0.0
 var _autosave_timer := 0.0
 var _pos_display_timer := 0.0
+var _cull_timer := 0.0
+var _cull_pos := Vector3.INF
 var _time := 0.0
 var _auto_start := false
 var _shot_path := ""
@@ -221,6 +229,12 @@ func _setup_scene() -> void:
 	add_child(camera)
 	camera.current = true
 
+	# In VR the camera above stays the player body/head proxy; the rig renders from the tracked head.
+	xr_rig = XRRig.try_create(self)
+	if xr_rig != null:
+		add_child(xr_rig)
+		camera.current = false
+
 	fx = Effects.new()
 	fx.name = "Effects"
 	add_child(fx)
@@ -230,7 +244,11 @@ func _setup_scene() -> void:
 	ui = GameUI.new()
 	ui.name = "UI"
 	ui.game = self
-	add_child(ui)
+	if xr_rig != null:
+		xr_rig.ui_viewport.add_child(ui)
+		xr_rig.attach_hud_overlays(ui)
+	else:
+		add_child(ui)
 	gamepad = GamepadInput.new()
 	gamepad.game = self
 	add_child(gamepad)
@@ -250,6 +268,8 @@ func player_position() -> Vector3:
 
 func vibrate(duration_ms: float, weak: float, strong: float) -> void:
 	gamepad.vibrate(duration_ms, weak, strong)
+	if xr_rig != null and gamepad.vibration_enabled:
+		xr_rig.haptic(duration_ms, maxf(weak, strong))
 
 
 # ---------------------------------------------------------------- Storage (localStorage replacement)
@@ -293,6 +313,8 @@ func _init_game() -> void:
 			gamepad.invert_y = saved_opts.controllerInvertY
 		if saved_opts.get("controllerSens") is float or saved_opts.get("controllerSens") is int:
 			gamepad.set_sensitivity(float(saved_opts.controllerSens))
+		if saved_opts.get("showHud") is bool:
+			ui.set_hud_visible(saved_opts.showHud)
 	set_normal_maps_enabled(normal_maps_enabled)
 	ui.sync_options()
 
@@ -324,7 +346,7 @@ func _init_game() -> void:
 	world_ready = true
 	ui.show_loading(false)
 
-	var sounds: Array = SWISH_SOUNDS + IMPACT_SOUNDS + PLAYER_IMPACT_SOUNDS + ["spell1.wav", "spell2.wav", "spell3.wav",
+	var sounds: Array = SWISH_SOUNDS + IMPACT_SOUNDS + PLAYER_IMPACT_SOUNDS + DOOR_OPEN_SOUNDS + ["spell1.wav", "spell2.wav", "spell3.wav",
 		"fireball.wav", "explod1.wav", "explod2.wav", "walk.wav", "die.wav", "death1.wav", "death2.wav", "death3.wav", "death4.wav"]
 	for m: Monster in monsters:
 		for k in ["painSound", "deathSound", "weaponSound", "yellSound", "sound"]:
@@ -385,7 +407,8 @@ func is_paused() -> bool:
 # Enters gameplay: captures the mouse and hides the menu (startGameSession).
 func start_game_session() -> void:
 	playing = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if xr_rig == null:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	ui.show_menu(false)
 	ui.show_loading(not world_ready)
 	audio.set_paused(false)
@@ -401,7 +424,7 @@ func pause_game_session() -> void:
 	ui.show_menu(true)
 	ui.show_loading(false)
 	ui.show_menu_view("main")
-	ui.set_prompt("Paused - Resume or choose an option:")
+	ui.set_prompt("Paused at Depth %d (Hero LVL %d). Resume to continue:" % [dungeon_depth, player_stats.level])
 	ui.set_resume_enabled(true)
 	save_current_run()
 	release_inputs()
@@ -418,11 +441,18 @@ func release_inputs() -> void:
 	is_sprinting = false
 
 
+func quit_game() -> void:
+	if game_started:
+		save_current_run()
+	get_tree().quit()
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		if game_started:
 			save_current_run()
-	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+	# In VR the desktop window usually isn't focused, so focus loss doesn't pause there.
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and xr_rig == null:
 		release_inputs()
 		if playing and world_ready:
 			pause_game_session()
@@ -492,6 +522,7 @@ func saved_game_options() -> Dictionary:
 		"controllerVibration": gamepad.vibration_enabled,
 		"controllerInvertY": gamepad.invert_y,
 		"controllerSens": gamepad.sensitivity,
+		"showHud": ui.is_hud_visible(),
 	}
 
 
@@ -516,6 +547,13 @@ func toggle_normal_maps_from_input() -> void:
 	save_game_options()
 	fx.create_floating_text("NORMAL MAPS: ON" if normal_maps_enabled else "NORMAL MAPS: OFF", camera.position,
 		"#22c55e" if normal_maps_enabled else "#ef4444")
+	audio.play_sound("buttonselect111.wav", 0.5)
+
+
+func toggle_hud_from_input() -> void:
+	ui.set_hud_visible(not ui.is_hud_visible())
+	ui.sync_options()
+	save_game_options()
 	audio.play_sound("buttonselect111.wav", 0.5)
 
 
@@ -696,11 +734,12 @@ func clear_current_world() -> void:
 		world_root.remove_child(child)
 		child.queue_free()
 	level_objects.clear()
+	_cull_timer = 0.0
 	active_pickups.clear()
 	doors.clear()
 	chests.clear()
-	fx.clear_lamps()
-	fx.clear_blood()
+	fx.clear_world_effects()
+	audio.stop_world_sounds()
 	collision.clear()
 
 
@@ -1150,7 +1189,7 @@ func generate_and_load_new_level(descend: bool = false, override_options: Dictio
 # ---------------------------------------------------------------- Input
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and playing and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not ui.is_menu_visible():
+	if event is InputEventMouseMotion and xr_rig == null and playing and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not ui.is_menu_visible():
 		var rot := camera.rotation
 		rot.y -= event.relative.x * MOUSE_SENSITIVITY
 		rot.x = clampf(rot.x - event.relative.y * MOUSE_SENSITIVITY, -PI / 2.0, PI / 2.0)
@@ -1223,6 +1262,8 @@ func _on_key_down(key: int) -> void:
 			generate_and_load_new_level(false)
 		KEY_P, KEY_M:
 			toggle_music_from_input()
+		KEY_H:
+			toggle_hud_from_input()
 
 
 func _on_key_up(key: int) -> void:
@@ -1240,14 +1281,18 @@ func _process(delta: float) -> void:
 	_handle_screenshot(delta)
 	var paused := is_paused()
 	var gp: Dictionary = gamepad.poll(delta, paused)
+	if xr_rig != null:
+		gp = XRRig.merge_input(gp, xr_rig.poll(delta, paused))
 	if paused:
+		if xr_rig != null:
+			xr_rig.sync_body(delta, false)
 		return
 	if gp.get("pause_toggle", false):
 		pause_game_session()
 		return
-	if gp.get("has_look", false):
+	if gp.get("has_look", false) and xr_rig == null:
 		gamepad.apply_look(camera, delta, gp.look_x, gp.look_y)
-	if gp.get("recenter_pitch", false):
+	if gp.get("recenter_pitch", false) and xr_rig == null:
 		camera.rotation.x = 0.0
 		vibrate(40, 0.2, 0.05)
 	if gp.get("jump", false) and not fly_mode:
@@ -1268,7 +1313,11 @@ func _process(delta: float) -> void:
 
 	_time += delta
 	var dt := minf(delta, 0.1)
+	if xr_rig != null:
+		xr_rig.begin_frame(dt, gp)
 	_update_player_movement(dt, gp)
+	if xr_rig != null:
+		xr_rig.sync_body(dt, true)
 
 	var pos := camera.position
 	_pos_display_timer += delta
@@ -1300,7 +1349,11 @@ func _process(delta: float) -> void:
 	_update_doors(dt)
 	audio.update_music(dt)
 	fx.update_lighting(_time, dt, pos)
-	_update_distance_culling(pos)
+	_cull_timer -= dt
+	if _cull_timer <= 0.0 or pos.distance_squared_to(_cull_pos) > CULL_MOVE_DISTANCE * CULL_MOVE_DISTANCE:
+		_cull_timer = CULL_INTERVAL
+		_cull_pos = pos
+		_update_distance_culling(pos)
 	ui.update_minimap(pos, camera)
 
 
@@ -1530,28 +1583,36 @@ func update_weapon_mesh() -> void:
 		return
 	var s := def.scale
 	gun_mesh = md2.create_instance(def.texture_alias)
+	gun_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	gun_model = md2
+	if xr_rig != null:
+		# VR: fixed frame-0 pose held by the right controller; the controller provides all motion.
+		xr_rig.attach_weapon(gun_mesh, md2, def.name, s)
+		return
 	gun_mesh.scale = Vector3(s, s, s)
 	gun_mesh.position = Vector3(0, -25, 5)
 	gun_mesh.rotation = Vector3(0, PI / 2.0, 0)
-	gun_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	camera.add_child(gun_mesh)
-	gun_model = md2
 
 
 func trigger_weapon_attack() -> void:
 	if player_dead:
 		return
 	var gun := current_gun_name()
+	# In VR melee weapons only hit by physically swinging them (see XRRig); the trigger casts spells.
+	if xr_rig != null and not spell_counts.has(gun):
+		return
 	if spell_counts.has(gun):
 		if spell_counts[gun] <= 0:
 			audio.play_sound("buttonselect111.wav", 0.5)
 			return
 		spell_counts[gun] -= 1
 		update_player_hud()
-	is_weapon_attacking = true
-	has_weapon_hit = false
-	weapon_anim_timer = 0.0
-	weapon_anim = Monster.ANIMS.ATTACK
+	if xr_rig == null:
+		is_weapon_attacking = true
+		has_weapon_hit = false
+		weapon_anim_timer = 0.0
+		weapon_anim = Monster.ANIMS.ATTACK
 	vibrate(90, 0.35, 0.2)
 	match gun:
 		"MAGIC MISSILE":
@@ -1605,6 +1666,20 @@ func check_player_attack_hit() -> void:
 			closest = m
 	if closest == null:
 		return
+	apply_melee_hit(closest, player_dir)
+
+
+func is_melee_weapon() -> bool:
+	return not spell_counts.has(current_gun_name())
+
+
+# strength: swing speed relative to the start threshold (1.0 = just fast enough); harder swings sound louder.
+func on_xr_swing_started(strength: float = 1.0) -> void:
+	audio.play_sound(AudioManager.random_sound(SWISH_SOUNDS), clampf(0.3 + 0.2 * strength, 0.4, 0.75))
+
+
+# Damages a monster with the current melee weapon; shared by the desktop attack animation and VR swings.
+func apply_melee_hit(closest: Monster, player_dir: Vector3) -> void:
 	var damage: float = WEAPON_DAMAGE.get(current_gun_name(), 25)
 	var box := closest.bbox
 	var has_box := not box.is_empty()
@@ -1620,7 +1695,7 @@ func check_player_attack_hit() -> void:
 
 
 func _update_player_weapon_animation(delta: float, fwd: bool, back: bool, left: bool, right: bool) -> void:
-	if gun_mesh == null or gun_model == null:
+	if gun_mesh == null or gun_model == null or xr_rig != null:
 		return
 	var moving := fwd or back or left or right
 	var target: Dictionary = Monster.ANIMS.STAND
@@ -1700,6 +1775,10 @@ func launch_projectile(type: String) -> void:
 	var look_dir := look_direction()
 	var spawn := camera.position + look_dir * 40.0
 	spawn.y -= 10.0
+	if xr_rig != null:
+		var ray := xr_rig.aim_ray()
+		look_dir = ray[1]
+		spawn = ray[0] + look_dir * 20.0
 	var slot := fx.acquire_dynamic_light(def.lightColor, def.lightIntensity, def.lightDistance)
 	if slot != null:
 		slot.light.position = spawn
@@ -1742,7 +1821,7 @@ func _explosion_particles(pos: Vector3, count: int, base_speed: float, speed_ran
 
 
 func trigger_spell_explosion(pos: Vector3, type: String, damage: float, aoe_radius: float, color_hex: int) -> void:
-	audio.play_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", 0.85)
+	audio.play_world_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", pos, 0.85)
 	var dist_p := pos.distance_to(camera.position)
 	if dist_p <= 600.0:
 		var intensity := maxf(0.2, 1.0 - dist_p / 600.0)
@@ -1756,11 +1835,11 @@ func trigger_spell_explosion(pos: Vector3, type: String, damage: float, aoe_radi
 		if dist <= aoe_radius:
 			var sc := maxf(0.5, 1.0 - (dist / aoe_radius) * 0.5)
 			m.take_damage(roundi(damage * sc))
-			audio.play_sound(AudioManager.random_sound(IMPACT_SOUNDS), 0.7)
+			audio.play_world_sound(AudioManager.random_sound(IMPACT_SOUNDS), m.position, 0.7)
 
 
 func trigger_monster_spell_explosion(pos: Vector3, type: String, damage: float, aoe_radius: float, color_hex: int) -> void:
-	audio.play_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", 0.85)
+	audio.play_world_sound("explod1.wav" if type == "FIREBALL" else "explod2.wav", pos, 0.85)
 	_explosion_particles(pos, 50 if type == "FIREBALL" else 35, 100.0, 220.0, color_hex, 12.0, 0.65)
 	fx.add_explosion_flash(pos, color_hex, aoe_radius)
 	var player_pos := camera.position
@@ -2007,6 +2086,7 @@ func open_nearby_door() -> void:
 			nearest_door = door
 	if not nearest_door.is_empty():
 		nearest_door.is_opening = true
+		audio.play_world_sound(AudioManager.random_sound(DOOR_OPEN_SOUNDS), nearest_door.position, 0.8)
 		vibrate(90, 0.2, 0.35)
 	var nearest_chest: Dictionary = {}
 	best = max_sq

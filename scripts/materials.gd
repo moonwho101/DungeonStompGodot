@@ -89,6 +89,14 @@ void light() {
 }
 """
 
+const LAMBERT_LIGHT := """
+// Keep the light product in full precision. Mobile's built-in Lambert path drops
+// attenuation below FP16's normal minimum, even with our high-energy world-unit lights.
+void light() {
+	DIFFUSE_LIGHT += (ATTENUATION * LIGHT_COLOR) * max(dot(NORMAL, LIGHT), 0.0) / PI;
+}
+"""
+
 static var texture_manager: Parsers.TextureManager = null
 static var _shaders: Dictionary = {}
 static var _texture_cache: Dictionary = {} # alias -> Texture2D (fallback if missing)
@@ -116,10 +124,34 @@ static func get_shader(kind: String) -> Shader:
 	code += LAMBERT_FRAGMENT.replace("#ALPHA#", alpha)
 	if kind.begins_with("phong"):
 		code += PHONG_LIGHT
+	else:
+		code += LAMBERT_LIGHT
 	var sh := Shader.new()
-	sh.code = code
+	sh.code = instance_shader_code(code)
 	_shaders[kind] = sh
 	return sh
+
+
+static func uses_material_uniforms() -> bool:
+	return RenderingServer.get_current_rendering_method() == "gl_compatibility"
+
+
+# GLES reserves a block of 16 global slots per instance. A full dungeon exceeds
+# that hardware-limited buffer, so keep per-object data on unique materials there.
+static func instance_shader_code(code: String) -> String:
+	return code.replace("instance uniform ", "uniform ") if uses_material_uniforms() else code
+
+
+static func material_for_instance(shared: ShaderMaterial) -> ShaderMaterial:
+	return shared.duplicate() as ShaderMaterial if uses_material_uniforms() else shared
+
+
+static func set_instance_parameter(instance: GeometryInstance3D, parameter: StringName, value: Variant) -> void:
+	if uses_material_uniforms():
+		var material := instance.material_override as ShaderMaterial
+		material.set_shader_parameter(parameter, value)
+	else:
+		instance.set_instance_shader_parameter(parameter, value)
 
 
 static func fallback_texture() -> Texture2D:

@@ -234,11 +234,11 @@ static func parse(data: PackedByteArray) -> MD2Model:
 	return m
 
 
-# Creates a mesh instance using the given shared MD2 material (which carries the VAT textures).
+# VAT textures stay shared; Compatibility uses a unique material for each pose.
 func create_instance(tex_alias: String) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
-	mi.material_override = get_material(tex_alias)
+	mi.material_override = Materials.material_for_instance(get_material(tex_alias))
 	mi.custom_aabb = full_aabb
 	set_pose(mi, [0], [1.0])
 	return mi
@@ -287,8 +287,8 @@ func set_pose(mi: GeometryInstance3D, frames: Array, weights: Array) -> void:
 		if not merged and n < 4:
 			f[n] = 0
 			w[n] = base
-	mi.set_instance_shader_parameter("frames", f)
-	mi.set_instance_shader_parameter("weights", w)
+	Materials.set_instance_parameter(mi, "frames", f)
+	Materials.set_instance_parameter(mi, "weights", w)
 
 
 func frame_aabb(frame: int) -> AABB:
