@@ -39,9 +39,23 @@ Monster pursuit and strafing use collision-checked movement steps no larger than
 - 🏰 **Infinite Procedural Dungeons:** Generate complete dungeons on the fly with seedable layouts, configurable room counts, corridors, teleporters, doors, and exit portals. Descend deeper into the dungeon where monsters grow stronger and rewards grow greater.
 - ⚔️ **Real-Time Combat & Full Arsenal:** 10 distinct melee weapons (Axe, Flamesword, Bastard Sword, Battle Axe, Ice Sword, Lightning Sword, Morning Star, Spiked Flail, Split Sword, and Super Flamesword) with authentic first-person bobbing, swinging animations, and impact effects.
 - 🔮 **Spellcasting System:** Cast devastating real-time spells including **Magic Missile**, **Fireball**, **Lightning**, and **Healing** with physics-driven projectile trajectories and splash damage.
+- **Listen around corners:** Monster calls, swings, spell windups, and explosions come from their position in the dungeon. Turn your head in VR to locate a caster before the projectile arrives. Music, menu sounds, and pickup chimes stay centered.
 - 🧟 **30 Monster Families:** Ogres, hydras, dragons, necromancers, demonesses, faeries, mummies, wraiths, goblins, skeletons, wolves, tentacle horrors, and more. Features state-machine AI with patrol, pursuit, melee attacks, and ranged spellcasting.
+  Once alerted, standing or running monsters have a 5% chance per eligible second to flip, salute, taunt, wave, or point. Monsters pause their pursuit or strafing to gesture in place, sometimes with a call, then resume moving. Attacks can still interrupt a gesture.
+  To tune a spellcaster, edit `spellLevel` in its `CONFIGS` entry in [monster.gd](scripts/monster.gd). Use `basic` for the original recovery after a ranged cast, `heavy` for half that recovery, or `savage` for one eighth. Spell windup and damage stay the same. Melee-only monsters do not gain spells.
+- 🎭 **Monster Personalities:** Each monster family has its own personality, set by the `personality` key in its `CONFIGS` entry in [monster.gd](scripts/monster.gd). The personality is shown in color above the health bar and changes stats, XP, and behavior. Monsters may shout a line in character when they spot you:
+  - **Brute** (Bauul, Ogre, Dragon): more health and damage, but slower.
+  - **Berserker** (Tentacle, Ogro, Insect, Demon, Craz): becomes enraged below half health, moving faster, hitting harder, and attacking more often.
+  - **Coward** (Goblin, Slave, Imp): runs away once when badly hurt, then returns to fight.
+  - **Cunning** (Sorcerer, Wraith, Faerie, Okta): melee monsters zig-zag toward you; spellcasters only gain damage and XP.
+  - **Show-off** (Phantom, Demoness, Fulimo, Sorb): gestures and taunts much more often.
+  - **Pack Leader** (Skeleton, Wolf, Necromancer, Rider): alerts idle monsters nearby.
+  - **Drowsy** (Corpse, Oluve, Mummy): notices you late and moves slowly.
+  - **Vigilant** (Knight, Hydra, Cobra, Centaur): notices you from farther away.
+
+  To tune a personality's stats and lines, edit `PERSONALITIES` in [monster.gd](scripts/monster.gd).
 - 💡 **Godot Forward+ 3D Rendering:** Dynamic lighting with flickering lamp glare, normal map support (`ds_normal_maps` shader global), particle effects for blood splatters and spell bursts, and atmospheric distance fog.
-- 🧭 **Retro HUD & Radar Minimap:** Circular real-time radar minimap tracking surrounding walls, monsters, and loot. Polished HUD displaying health, XP, dungeon depth, kill counts, and active equipment.
+- 🧭 **Retro HUD & Radar Minimap:** Follow the blue arrow on the rim toward the exit portal. When you get close, it becomes a pulsing blue target at the portal's map location. Both appear above walls, loot, enemies, and the player marker.
 - 💾 **Persistent Adventure State:** Automatically saves run progress to `user://` — slain monsters, looted chests, unlocked doors, and player stats persist across sessions and depth transitions.
 - 🎮 **Full Input & Controller Support:** Native keyboard/mouse and gamepad support (Xbox, PlayStation DualSense/DualShock, Nintendo Switch Pro) with analog movement, stick aiming, haptics/rumble, and menu navigation.
 
@@ -111,17 +125,41 @@ Copy the runtime data folders alongside the exported binary:
 cp -r Assets bin Sounds Midi build/windows/
 ```
 
+### Exporting Android / Meta Quest Builds
+
+The `dungeonstomp` Android preset needs no extra copy step. The [data_export](addons/data_export/plugin.gd) editor plugin (enabled in `project.godot`) packs `Assets/`, `bin/`, `Sounds/` and `Midi/` into the `.pck` during Android exports, and `DataPaths` reads them from `res://`. The plugin is required because those folders carry `.gdignore`, which hides them from the normal exporter.
+
+For Quest 3, use **Mobile** (Vulkan) or **Compatibility** (`gl_compatibility`, OpenGL ES). When switching, also set **Rendering > Renderer > Rendering Method.mobile** to the desired renderer: the mobile platform override can otherwise keep an Android export on Mobile.
+
+The shared materials use a custom per-pixel Lambert light function to preserve falloff in the game's large world units; Godot's built-in Mobile Lambert path cuts off small FP16 attenuation values before multiplying by light energy. Compatibility uses unique materials for lamp glare, MD2 poses, and health bars instead of exhausting GLES's hardware-limited per-instance uniform buffer. Meshes, shaders, and textures remain shared. Do not enable **Force Vertex Shading**, which bypasses custom light functions.
+
 ### Running Automated Headless Tests
 
-Run the headless test suite to verify parsers, collision math, model loaders, dungeon generation, fall recovery, monster attack range, and low-FPS monster movement:
+Run the headless test suite to verify parsers, collision math, model loaders, dungeon generation, fall recovery, and monster attack range:
 
 ```bash
-godot --headless --path . -s res://tests/test_runner.gd
+godot --headless --xr-mode off --path . -s res://tests/test_runner.gd
+```
+
+To compare combat particle CPU cost between revisions, run
+`godot --headless --xr-mode off --path . -s res://tests/bench_effects.gd`.
+It reports the median update time and submitted instances after a full pool expires down to 32 live sparks.
+This does not measure Quest GPU time or overall frame rate.
+
+Lighting regression tests need a real GPU renderer (not `--headless`). They measure point-light falloff against the intended curve:
+
+```bash
+godot --xr-mode off --path . --rendering-method mobile -s res://tests/test_lighting.gd
+godot --xr-mode off --path . --rendering-method gl_compatibility -s res://tests/test_lighting.gd
 ```
 
 ---
 
 ## 🎮 Controls
+
+In Options, a light outline with an empty center means the setting is off. An amber box with a check mark means it is on. The focus outline surrounds the whole row and is separate from the check mark.
+
+Open **Options** during a run to toggle **God Mode** (invincibility) or **Fly Mode**. These match the gameplay shortcuts and reset when you start a new game. Choose **Exit Game** from the main or pause menu to close the game; quitting a started run saves it for **Resume**.
 
 ### Keyboard & Mouse
 
@@ -133,10 +171,11 @@ godot --headless --path . -s res://tests/test_runner.gd
 | `Space` | Jump (or fly up in fly mode) |
 | `Shift` | Sprint |
 | `Q` / `Z` | Next / previous weapon or spell |
-| `E` | Open nearby door / interact with chest |
+| `E` | Open nearby door / interact with chest. Stone doors play a sliding sound from the doorway as they open. |
 | `G` | Generate a new procedural dungeon level |
 | `N` | Toggle normal mapping |
 | `P` / `M` | Toggle music on/off |
+| `H` | Toggle the player HUD (also in Options → Show Player HUD) |
 | `F` / `V` | Toggle fly mode (noclip exploration) |
 | `C` / `Ctrl` | Fly down (while in fly mode) |
 | `I` | Cheat: Toggle God Mode (invincibility) |
@@ -161,6 +200,28 @@ godot --headless --path . -s res://tests/test_runner.gd
 | **Back / Select** | Cheat: Toggle God Mode |
 | **D-Pad Up** | Toggle music on/off |
 | **D-Pad Down** | Toggle normal mapping |
+
+### VR (OpenXR)
+
+When an OpenXR runtime with a connected headset is available (SteamVR, Meta Quest Link, Windows Mixed Reality via SteamVR, etc.), the game starts in VR automatically. Without one it falls back to the desktop mode above. Pass `-- --no-xr` to force desktop mode.
+
+In VR the player weapon (an MD2 model) is drawn in one fixed pose, held in your right hand. It never plays its MD2 animations; your controller moves it. Melee weapons hit by **physically swinging** them into monsters (one hit per monster per swing). Spells fire from where the right controller points.
+
+| VR Input | Action |
+|----------|--------|
+| **Swing right controller** | Melee attack (axes and swords) |
+| **Right Trigger** | Cast the selected spell / click menu buttons |
+| **Left Stick** | Move / Strafe (head-relative) |
+| **Left Stick Click** | Toggle sprint |
+| **Right Stick (left/right)** | Smooth turn |
+| **Right Stick (up/down)** | Fly up/down (in fly mode) |
+| **A** | Jump (or fly up in fly mode) |
+| **B** | Interact / open door / open chest (menu: back) |
+| **Y** / **Right Stick Click** | Next weapon or spell |
+| **X** | Previous weapon or spell |
+| **Left Trigger** / **Left Menu Button** | Pause / resume (open or close the menu) |
+
+Menus appear on a panel floating in front of you. The HUD is laid out like a VR dungeon crawler: the debug/info panel sits in the upper-left of your view, the minimap in the upper-right, and the stat bar low in front of you. They follow your body (recentring only when you turn well away) and never move when the menu opens. Their angles are `DEBUG_PANEL_ANGLES`, `MINIMAP_ANGLES` and `STAT_BAR_ANGLES` in `scripts/xr_rig.gd`; the stat bar's size is `HUD_SCALE` in `scripts/ui.gd` (the same setting controls the desktop HUD size). Set `SHOW_DEBUG_PANEL` in `scripts/ui.gd` to `false` to remove the debug/info panel. Weapon fit (`WEAPON_*`), swing sensitivity (`SWING_*`), turn speed, and panel placement (`UI_*`, `OVERLAY_*`) are constants at the top of `scripts/xr_rig.gd`. For development without a headset, `-- --xr-simulate` builds the VR rig with fixed head and hand poses in the desktop window.
 
 ---
 
@@ -188,7 +249,8 @@ DungeonStompGodot/
 │   ├── monster.gd          # Monster AI and combat state machine
 │   ├── parsers.gd          # Classic binary/text file format parsers
 │   ├── tds.gd              # 3D Studio (.3ds) mesh loader
-│   └── ui.gd               # HUD, menus, and on-screen messages
+│   ├── ui.gd               # HUD, menus, and on-screen messages
+│   └── xr_rig.gd           # OpenXR VR rig, controller-held weapon, swing melee, VR UI panel
 ├── tests/
 │   └── test_runner.gd      # Headless automated test suite
 ├── tools/                  # Asset conversion and analysis utilities

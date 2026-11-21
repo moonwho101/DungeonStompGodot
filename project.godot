@@ -23,10 +23,17 @@ window/size/viewport_height=2160
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/data_export/plugin.cfg")
+
 [rendering]
 
+renderer/rendering_method="mobile"
 textures/vram_compression/import_s3tc_bptc=true
+textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/use_debanding=true
 
 [shader_globals]
 
@@ -34,3 +41,11 @@ ds_normal_maps={
 "type": "bool",
 "value": true
 }
+
+[xr]
+
+openxr/enabled=true
+openxr/foveation_level=3
+openxr/foveation_dynamic=true
+openxr/startup_alert=false
+shaders/enabled=true

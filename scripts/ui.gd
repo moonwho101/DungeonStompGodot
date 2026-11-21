@@ -3,6 +3,7 @@ class_name GameUI
 extends CanvasLayer
 
 const AMBER := Color("#f59e0b")
+const SHOW_DEBUG_PANEL := false # top-left info panel (mode, position, depth, objects); set false to hide it
 
 const VIGNETTE_SHADER := """
 shader_type canvas_item;
@@ -48,10 +49,6 @@ var _flash_mat: ShaderMaterial
 var _flash_opacity := 0.0
 var _flash_target := 0.0
 var _flash_hold := 0.0
-var _low_health: ColorRect
-var _low_health_mat: ShaderMaterial
-var _low_health_active := false
-var _low_health_time := 0.0
 var _death: Control
 var _info: RichTextLabel
 var _info_values := {"mode": "FPS (WALK)", "mode_color": "#10b981", "pos": "0, 0, 0", "depth": "1", "obj": "0",
@@ -90,6 +87,9 @@ var _opt_normal: CheckBox
 var _opt_music: CheckBox
 var _opt_vibration: CheckBox
 var _opt_invert: CheckBox
+var _opt_hud: CheckBox
+var _opt_god: CheckBox
+var _opt_fly: CheckBox
 var _opt_sens: HSlider
 var _opt_sens_val: Label
 var _btn_fullscreen: Button
@@ -159,7 +159,7 @@ func _label(text: String, font: Font, size: int, color: Color) -> Label:
 func _on_resize() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	_flash_mat.set_shader_parameter("rect_size", vs)
-	_low_health_mat.set_shader_parameter("rect_size", vs)
+	_fit_hud()
 
 
 # ---------------------------------------------------------------- Overlays
@@ -175,16 +175,13 @@ func _vignette(root: Control, color: Color, inner: float) -> ShaderMaterial:
 	mat.set_shader_parameter("edge_color", color)
 	mat.set_shader_parameter("inner", inner)
 	rect.material = mat
+	rect.visible = false # shown only while a flash is fading in/out
 	root.add_child(rect)
-	if _low_health == null and inner > 0.5:
-		_low_health = rect
-	else:
-		_flash = rect
+	_flash = rect
 	return mat
 
 
 func _build_overlays(root: Control) -> void:
-	_low_health_mat = _vignette(root, Color(160 / 255.0, 0, 0, 0.55), 0.55)
 	_flash_mat = _vignette(root, Color(1, 0, 0, 0.8), 0.4)
 
 	_death = ColorRect.new()
@@ -211,10 +208,13 @@ func _build_overlays(root: Control) -> void:
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	root.add_child(_death)
 
-	var cross := Crosshair.new()
-	cross.set_anchors_preset(Control.PRESET_CENTER)
-	cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(cross)
+	# In VR aiming comes from the controllers, so a crosshair on the body-locked UI panel would be misleading.
+	if game == null or game.xr_rig == null:
+		var cross := Crosshair.new()
+		cross.set_anchors_preset(Control.PRESET_CENTER)
+		cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(cross)
+		_hud_items.append(cross)
 
 
 class Crosshair:
@@ -226,6 +226,9 @@ class Crosshair:
 
 
 func flash_screen(kind: String, opacity: float, hold_ms: float) -> void:
+	# No damage flash; in VR every screen flash would show up as a tinted rectangle on the UI panel.
+	if kind == "red" or game.xr_rig != null:
+		return
 	var color := Color(1, 0, 0, 0.8)
 	var inner := 0.4
 	match kind:
@@ -249,18 +252,25 @@ func show_death_screen(show: bool) -> void:
 # ---------------------------------------------------------------- Minimap and info panel
 
 func _build_minimap(root: Control) -> void:
+	_minimap_box = Control.new()
+	_minimap_box.name = "Minimap"
+	_minimap_box.custom_minimum_size = Vector2(260, 260)
+	_minimap_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_minimap_box.anchor_left = 1.0
+	_minimap_box.anchor_right = 1.0
+	_minimap_box.offset_left = -15 - 260
+	_minimap_box.offset_right = -15
+	_minimap_box.offset_top = 15
+	_minimap_box.offset_bottom = 15 + 260
+	root.add_child(_minimap_box)
+	_hud_items.append(_minimap_box)
 	var frame := Panel.new()
 	frame.add_theme_stylebox_override("panel", _style(Color(10 / 255.0, 14 / 255.0, 23 / 255.0, 0.88), Color(0, 0, 0, 0), 0, 130,
 		0, 0, Color(0, 0, 0, 0.8), 16))
 	frame.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.anchor_left = 1.0
-	frame.anchor_right = 1.0
-	frame.offset_left = -15 - 260
-	frame.offset_right = -15
-	frame.offset_top = 15
-	frame.offset_bottom = 15 + 260
-	root.add_child(frame)
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_minimap_box.add_child(frame)
 	minimap = Minimap.new()
 	minimap.game = game
 	minimap.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -268,21 +278,20 @@ func _build_minimap(root: Control) -> void:
 	var border := Panel.new()
 	border.add_theme_stylebox_override("panel", _style(Color(0, 0, 0, 0), Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.4), 2, 130))
 	border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	border.anchor_left = 1.0
-	border.anchor_right = 1.0
-	border.offset_left = -15 - 260
-	border.offset_right = -15
-	border.offset_top = 15
-	border.offset_bottom = 15 + 260
-	root.add_child(border)
+	border.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_minimap_box.add_child(border)
 
 
 func update_minimap(pos: Vector3, camera: Camera3D) -> void:
+	if not is_hud_visible():
+		return
 	minimap.update_minimap(pos, camera, get_process_delta_time())
 
 
 func _build_info(root: Control) -> void:
 	var panel := PanelContainer.new()
+	panel.name = "DebugPanel"
+	_info_panel = panel
 	panel.add_theme_stylebox_override("panel", _style(Color(15 / 255.0, 23 / 255.0, 42 / 255.0, 0.85),
 		Color(1, 1, 1, 0.1), 1, 8, 14, 10, Color(0, 0, 0, 0.5), 12))
 	panel.position = Vector2(15, 15)
@@ -301,14 +310,19 @@ func _build_info(root: Control) -> void:
 	_info.add_theme_constant_override("line_separation", 4)
 	panel.add_child(_info)
 	root.add_child(panel)
+	panel.visible = SHOW_DEBUG_PANEL
+	if SHOW_DEBUG_PANEL:
+		_hud_items.append(panel)
 	_refresh_info()
 
 
 func _refresh_info() -> void:
+	if not SHOW_DEBUG_PANEL:
+		return # the panel is never shown; skip rebuilding its BBCode (position updates 10x per second)
 	var v := _info_values
 	var nm_on: bool = v.normalmap
 	var mu_on: bool = v.music
-	var t := "[b][color=#f59e0b]Dungeon Stomp Godot - by Mark Longo Copyright 2026[/color][/b]\n"
+	var t := "[b][color=#f59e0b]Dungeon Stomp Godot - by Mark Longo Copyright 2001-%d[/color][/b]\n" % Time.get_date_dict_from_system().year
 	t += "Mode: [color=%s]%s[/color]\n" % [v.mode_color, v.mode]
 	t += "Position: %s\n" % v.pos
 	t += "Depth: [color=#38bdf8]%s[/color] | Objects: %s | Lights: %s\n" % [v.depth, v.obj, v.light]
@@ -346,18 +360,25 @@ func set_gamepad_display(name: String, connected: bool) -> void:
 
 # ---------------------------------------------------------------- Bottom HUD
 
+const HUD_SCALE := 1.0 # size of the bottom HUD bar (1.0 = original size); raise it to make the HUD bigger
+
+static func _hs(v: float) -> int:
+	return roundi(v * HUD_SCALE)
+
+
 func _badge(title: String, value: String, value_color: Color, value_size: int = 15, min_w: float = 60.0) -> Label:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _style(Color(30 / 255.0, 41 / 255.0, 59 / 255.0, 0.6), Color(1, 1, 1, 0.12), 1, 8, 14, 6))
-	panel.custom_minimum_size = Vector2(min_w, 0)
+	panel.add_theme_stylebox_override("panel", _style(Color(30 / 255.0, 41 / 255.0, 59 / 255.0, 0.6), Color(1, 1, 1, 0.12),
+		_hs(1), _hs(8), _hs(14), _hs(6)))
+	panel.custom_minimum_size = Vector2(min_w * HUD_SCALE, 0)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 0)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var t := _label(title.to_upper(), _font_bold, 10, Color("#64748b"))
+	var t := _label(title.to_upper(), _font_bold, _hs(10), Color("#64748b"))
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var v := _label(value, _font_black, value_size, value_color)
+	var v := _label(value, _font_black, _hs(value_size), value_color)
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(t)
 	box.add_child(v)
@@ -367,22 +388,29 @@ func _badge(title: String, value: String, value_color: Color, value_size: int = 
 
 
 var _hud_row: HBoxContainer
+var _hud_panel: PanelContainer
+var _minimap_box: Control
+var _info_panel: PanelContainer
+var _hud_items: Array[Control] = [] # everything the "Show Player HUD" option toggles
+const BAR_W := 180.0 * HUD_SCALE
+const BAR_H := 16.0 * HUD_SCALE
 
 func _bar(title: String, right_text: String, right_color: Color, c0: Color, c1: Color, c2: Color) -> Array:
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
+	box.add_theme_constant_override("separation", _hs(4))
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var l := _label(title, _font_bold, 11, Color("#94a3b8"))
+	var l := _label(title, _font_bold, _hs(11), Color("#94a3b8"))
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var r := _label(right_text, _font_bold, 11, right_color)
+	var r := _label(right_text, _font_bold, _hs(11), right_color)
 	row.add_child(l)
 	row.add_child(r)
 	box.add_child(row)
 	var track := Panel.new()
-	track.custom_minimum_size = Vector2(180, 16)
-	track.add_theme_stylebox_override("panel", _style(Color(15 / 255.0, 23 / 255.0, 42 / 255.0, 0.8), Color(1, 1, 1, 0.15), 1, 8))
+	track.custom_minimum_size = Vector2(BAR_W, BAR_H)
+	track.add_theme_stylebox_override("panel", _style(Color(15 / 255.0, 23 / 255.0, 42 / 255.0, 0.8), Color(1, 1, 1, 0.15),
+		_hs(1), _hs(8)))
 	track.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var fill := ColorRect.new()
@@ -396,7 +424,7 @@ func _bar(title: String, right_text: String, right_color: Color, c0: Color, c1: 
 	mat.set_shader_parameter("c2", c2)
 	fill.material = mat
 	fill.position = Vector2(0, 0)
-	fill.size = Vector2(180, 16)
+	fill.size = Vector2(BAR_W, BAR_H)
 	track.add_child(fill)
 	box.add_child(track)
 	_hud_row.add_child(box)
@@ -406,7 +434,7 @@ func _bar(title: String, right_text: String, right_color: Color, c0: Color, c1: 
 func _build_hud(root: Control) -> void:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _style(Color(15 / 255.0, 18 / 255.0, 26 / 255.0, 0.93),
-		Color(1, 170 / 255.0, 0, 0.25), 1, 12, 24, 12, Color(0, 0, 0, 0.8), 24))
+		Color(1, 170 / 255.0, 0, 0.25), _hs(1), _hs(12), _hs(24), _hs(12), Color(0, 0, 0, 0.8), _hs(24)))
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.anchor_left = 0.5
 	panel.anchor_right = 0.5
@@ -415,8 +443,11 @@ func _build_hud(root: Control) -> void:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	panel.offset_bottom = -20
+	panel.resized.connect(_fit_hud)
+	_hud_panel = panel
+	_hud_items.append(panel)
 	_hud_row = HBoxContainer.new()
-	_hud_row.add_theme_constant_override("separation", 16)
+	_hud_row.add_theme_constant_override("separation", _hs(16))
 	_hud_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_hud_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(_hud_row)
@@ -429,13 +460,66 @@ func _build_hud(root: Control) -> void:
 	_xp_fill = xp[0]
 	_kills_text = _badge("KILLS", "0", Color("#f43f5e"))
 	_gun_text = _badge("WEAPON", "AXE", AMBER, 13, 120)
+	_set_fill(_hp_fill, _hp_cur)
+	_set_fill(_xp_fill, _xp_cur)
+
+
+# Keeps the HUD anchored bottom-centre and shrinks it if it would be wider than the screen. In VR the HUD has
+# its own panel sized to fit it (see XRRig.attach_hud), so it is never shrunk there.
+func _fit_hud() -> void:
+	if _hud_panel == null:
+		return
+	if _hud_detached:
+		_hud_panel.scale = Vector2.ONE
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var w := _hud_panel.size.x
+	var s := minf(1.0, vs.x * 0.96 / w) if w > 0.0 else 1.0
+	_hud_panel.pivot_offset = Vector2(w * 0.5, _hud_panel.size.y)
+	_hud_panel.scale = Vector2(s, s)
+
+
+var _hud_detached := false
+
+# The take_* functions move a HUD element out of the full-screen UI so VR can show it on its own panel.
+func _detach(c: Control) -> Control:
+	c.get_parent().remove_child(c)
+	c.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	c.position = Vector2.ZERO
+	c.scale = Vector2.ONE
+	c.pivot_offset = Vector2.ZERO
+	return c
+
+
+func take_hud_panel() -> PanelContainer:
+	_hud_detached = true
+	return _detach(_hud_panel)
+
+
+func take_minimap() -> Control:
+	_detach(_minimap_box)
+	_minimap_box.size = _minimap_box.custom_minimum_size
+	return _minimap_box
+
+
+func take_info_panel() -> PanelContainer:
+	return _detach(_info_panel)
+
+
+# Shows/hides every HUD element: bottom bar, minimap, info panel and crosshair.
+func set_hud_visible(show: bool) -> void:
+	for item: Control in _hud_items:
+		item.visible = show
+
+
+func is_hud_visible() -> bool:
+	return _hud_panel.visible
 
 
 func update_hud(stats: Dictionary, gun_text: String) -> void:
 	var max_hp := maxf(1.0, float(stats.maxHealth))
 	_hp_target = clampf(float(stats.health) / max_hp, 0.0, 1.0)
 	_xp_target = clampf(float(stats.xp) / maxf(1.0, float(stats.nextXp)), 0.0, 1.0)
-	_low_health_active = float(stats.health) > 0.0 and _hp_target < 0.3
 	_hp_text.text = "%d / %d" % [int(ceil(float(stats.health))), int(stats.maxHealth)]
 	_level_text.text = "LVL %d" % int(stats.level)
 	_kills_text.text = str(int(stats.kills))
@@ -470,6 +554,7 @@ func _build_toast(root: Control) -> void:
 	_toast.offset_top = 24
 	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast.modulate.a = 0.0
+	_toast.visible = false
 	_toast_label = _label("", _font_bold, 14, AMBER)
 	_toast.add_child(_toast_label)
 	root.add_child(_toast)
@@ -481,40 +566,52 @@ func toast(message: String) -> void:
 
 
 func _process(delta: float) -> void:
+	# Each element is only touched while it is changing, so an idle HUD doesn't redraw every frame.
 	# Damage / pickup flash (opacity transition 0.15 s ease-out)
 	if _flash_hold > 0.0:
 		_flash_hold -= delta
 		if _flash_hold <= 0.0:
 			_flash_target = 0.0
-	_flash_opacity = move_toward(_flash_opacity, _flash_target, delta / 0.15)
-	_flash_mat.set_shader_parameter("opacity", _flash_opacity)
-	# Low health pulse (1.1 s ease-in-out between 0.25 and 1)
-	if _low_health_active:
-		_low_health_time += delta
-		var k := 0.5 - 0.5 * cos(_low_health_time / 1.1 * TAU)
-		_low_health_mat.set_shader_parameter("opacity", lerpf(0.25, 1.0, k))
-	else:
-		_low_health_time = 0.0
-		_low_health_mat.set_shader_parameter("opacity", 0.0)
+	if _flash_opacity != _flash_target:
+		_flash_opacity = move_toward(_flash_opacity, _flash_target, delta / 0.15)
+		_flash_mat.set_shader_parameter("opacity", _flash_opacity)
+		_flash.visible = _flash_opacity > 0.0
 	# Bars ease towards their targets (CSS width transition 0.2 s)
-	_hp_cur = lerpf(_hp_cur, _hp_target, minf(1.0, delta * 12.0))
-	_xp_cur = lerpf(_xp_cur, _xp_target, minf(1.0, delta * 12.0))
-	_set_fill(_hp_fill, _hp_cur)
-	_set_fill(_xp_fill, _xp_cur)
+	_hp_cur = _ease_fill(_hp_fill, _hp_cur, _hp_target, delta)
+	_xp_cur = _ease_fill(_xp_fill, _xp_cur, _xp_target, delta)
 	# Toast slide in/out
+	var a := _toast.modulate.a
 	if _toast_timer > 0.0:
 		_toast_timer -= delta
-		_toast.modulate.a = move_toward(_toast.modulate.a, 1.0, delta / 0.3)
+		a = move_toward(a, 1.0, delta / 0.3)
 	else:
-		_toast.modulate.a = move_toward(_toast.modulate.a, 0.0, delta / 0.3)
-	_toast.offset_top = lerpf(-36.0, 24.0, _toast.modulate.a)
+		a = move_toward(a, 0.0, delta / 0.3)
+	if a != _toast.modulate.a:
+		_toast.modulate.a = a
+		_toast.offset_top = lerpf(-36.0, 24.0, a)
+		_toast.visible = a > 0.0
+
+
+func _ease_fill(fill: ColorRect, cur: float, target: float, delta: float) -> float:
+	if cur == target:
+		return cur
+	cur = lerpf(cur, target, minf(1.0, delta * 12.0))
+	if absf(cur - target) < 0.001:
+		cur = target
+	_set_fill(fill, cur)
+	return cur
+
+
+# True while the full-screen UI layer has something to draw (VR hides its world-space panel otherwise).
+func has_screen_content() -> bool:
+	return _menu.visible or _loading.visible or _death.visible or _toast.visible or _flash.visible
 
 
 func _set_fill(fill: ColorRect, pct: float) -> void:
-	var w := 180.0 * pct
-	fill.size = Vector2(w, 16)
+	var w := BAR_W * pct
+	fill.size = Vector2(w, BAR_H)
 	fill.visible = w > 0.5
-	(fill.material as ShaderMaterial).set_shader_parameter("rect_size", Vector2(maxf(w, 1.0), 16.0))
+	(fill.material as ShaderMaterial).set_shader_parameter("rect_size", Vector2(maxf(w, 1.0), BAR_H))
 
 
 # ---------------------------------------------------------------- Menu
@@ -523,7 +620,7 @@ func _menu_button(text: String, primary: bool = false) -> Button:
 	var b := Button.new()
 	b.text = text.to_upper()
 	b.add_theme_font_override("font", _font_bold)
-	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_font_size_override("font_size", 18)
 	b.focus_mode = Control.FOCUS_ALL
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
@@ -560,7 +657,7 @@ func _menu_button(text: String, primary: bool = false) -> Button:
 
 
 func _help(text: String) -> Label:
-	var l := _label(text, _font, 11, Color("#64748b"))
+	var l := _label(text, _font, 15, Color("#cbd5e1"))
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return l
@@ -568,9 +665,9 @@ func _help(text: String) -> Label:
 
 func _field_label(text: String, value: String) -> Array:
 	var row := HBoxContainer.new()
-	var l := _label(text, _font_bold, 13, Color("#cbd5e1"))
+	var l := _label(text, _font_bold, 17, Color("#e2e8f0"))
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var v := _label(value, _font_bold, 13, AMBER)
+	var v := _label(value, _font_bold, 17, AMBER)
 	row.add_child(l)
 	row.add_child(v)
 	return [row, v]
@@ -580,7 +677,11 @@ func _checkbox(text: String) -> CheckBox:
 	var c := CheckBox.new()
 	c.text = text
 	c.add_theme_font_override("font", _font)
-	c.add_theme_font_size_override("font_size", 14)
+	c.add_theme_font_size_override("font_size", 18)
+	c.add_theme_icon_override("unchecked", preload("res://scenes/menu_unchecked.svg"))
+	c.add_theme_icon_override("checked", preload("res://scenes/menu_checked.svg"))
+	c.add_theme_constant_override("h_separation", 12)
+	c.custom_minimum_size.y = 36
 	c.add_theme_color_override("font_color", Color("#e2e8f0"))
 	c.add_theme_color_override("font_hover_color", Color.WHITE)
 	c.add_theme_color_override("font_focus_color", Color("#fbbf24"))
@@ -604,7 +705,7 @@ func _slider(min_v: float, max_v: float, step: float) -> HSlider:
 
 
 func _h3(text: String) -> Label:
-	var l := _label(text.to_upper(), _font_bold, 18, Color("#fbbf24"))
+	var l := _label(text.to_upper(), _font_bold, 22, Color("#fbbf24"))
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return l
 
@@ -612,7 +713,7 @@ func _build_menu(root: Control) -> void:
 	_menu = PanelContainer.new()
 	_menu.add_theme_stylebox_override("panel", _style(Color(12 / 255.0, 15 / 255.0, 23 / 255.0, 0.97),
 		Color(1, 170 / 255.0, 0, 0.35), 1, 14, 32, 24, Color(0, 0, 0, 0.85), 48))
-	_menu.custom_minimum_size = Vector2(440, 0)
+	_menu.custom_minimum_size = Vector2(550, 0)
 	_menu.anchor_left = 0.5
 	_menu.anchor_right = 0.5
 	_menu.anchor_top = 0.5
@@ -625,14 +726,18 @@ func _build_menu(root: Control) -> void:
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 10)
 	_menu.add_child(outer)
-	var title := _label("⚔️ DUNGEON STOMP ⚔️", _font_bold, 24, AMBER)
+	var title := _label("⚔️ DUNGEON STOMP ⚔️", _font_bold, 29, AMBER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outer.add_child(title)
+	var credit := _label("Created by Mark Longo · Copyright © 2001-%d" % Time.get_date_dict_from_system().year,
+		_font, 15, Color("#cbd5e1"))
+	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	outer.add_child(credit)
 
 	# Main view
 	var main := VBoxContainer.new()
 	main.add_theme_constant_override("separation", 10)
-	_prompt = _label("Loading dungeon...", _font, 13, Color("#94a3b8"))
+	_prompt = _label("Loading dungeon...", _font, 17, Color("#cbd5e1"))
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main.add_child(_prompt)
@@ -643,11 +748,17 @@ func _build_menu(root: Control) -> void:
 	_btn_options = _menu_button("Options")
 	for b in [_btn_new, _btn_resume, _btn_generator, _btn_options]:
 		main.add_child(b)
-	_status = _label("", _font, 13, Color("#38bdf8"))
+	var exit_button := _menu_button("Exit Game")
+	exit_button.pressed.connect(func(): game.quit_game())
+	main.add_child(exit_button)
+	_status = _label("", _font, 17, Color("#38bdf8"))
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main.add_child(_status)
-	main.add_child(_help("WASD = Move   ·   Space = Jump   ·   E = Open Door   ·   G = Regen Dungeon   ·   Q/Z = Weapon   ·   Esc = Menu"))
-	main.add_child(_help("🎮 L-Stick = Move (L3 Sprint)   ·   R-Stick = Look (R3 Level)   ·   RT = Attack / Cast   ·   X = Open Door/Chest   ·   A = Jump / Confirm   ·   LB/RB = Weapon   ·   LT = Sprint   ·   Start = Menu"))
+	if game != null and game.xr_rig != null:
+		main.add_child(_help("🥽 L-Stick = Move (Click to Sprint)   ·   R-Stick = Turn   ·   Swing Weapon = Melee Attack   ·R-Trigger = Cast Spell / Select   ·   A = Jump   ·   B = Open Door/Chest / Back   ·   X/Y = Weapon   ·   L-Trigger / ☰ Menu = Menu"))
+	else:
+		main.add_child(_help("⌨️ WASD = Move   ·   Mouse = Look   ·   Left Click = Attack / Cast   ·   Shift = Sprint   ·   Space = Jump   ·   E = Open Door/Chest   ·   Q/Z = Weapon   ·   F = Fly   ·   G = Regen Dungeon   ·   H = HUD   ·   Esc = Menu"))
+		main.add_child(_help("🎮 L-Stick = Move (L3 Sprint)   ·   R-Stick = Look (R3 Level)   ·   RT = Attack / Cast   ·   X = Open Door/Chest   ·   A = Jump / Confirm   ·   LB/RB = Weapon   ·   LT = Sprint   ·   Start = Menu"))
 	main.add_child(_help("Find the glowing exit portal to descend — every level is tougher."))
 	outer.add_child(main)
 	_views["main"] = main
@@ -668,7 +779,7 @@ func _build_menu(root: Control) -> void:
 	_gen_seed.placeholder_text = "Leave empty for random"
 	_gen_seed.max_length = 32
 	_gen_seed.add_theme_font_override("font", _font)
-	_gen_seed.add_theme_font_size_override("font_size", 14)
+	_gen_seed.add_theme_font_size_override("font_size", 18)
 	_gen_seed.add_theme_stylebox_override("normal", _style(Color(15 / 255.0, 23 / 255.0, 42 / 255.0, 0.85), Color(1, 1, 1, 0.2), 1, 6, 12, 9))
 	_gen_seed.add_theme_stylebox_override("focus", _style(Color(0, 0, 0, 0), AMBER, 1, 6))
 	gen.add_child(_gen_seed)
@@ -687,7 +798,10 @@ func _build_menu(root: Control) -> void:
 	_opt_music = _checkbox("Music (P / M)")
 	_opt_vibration = _checkbox("Controller Vibration (Rumble)")
 	_opt_invert = _checkbox("Invert Look Y")
-	for c in [_opt_normal, _opt_music, _opt_vibration, _opt_invert]:
+	_opt_hud = _checkbox("Show Player HUD (H)")
+	_opt_god = _checkbox("God Mode (Invincibility)")
+	_opt_fly = _checkbox("Fly Mode")
+	for c in [_opt_normal, _opt_music, _opt_hud, _opt_vibration, _opt_invert, _opt_god, _opt_fly]:
 		opts.add_child(c)
 	var sens_row := _field_label("Controller Sensitivity:", "2.8")
 	opts.add_child(sens_row[0])
@@ -710,6 +824,10 @@ func _build_menu(root: Control) -> void:
 	_btn_gen_back.pressed.connect(_on_back)
 	_btn_opt_back.pressed.connect(_on_back)
 	_btn_fullscreen.pressed.connect(_on_fullscreen)
+	_opt_god.toggled.connect(func(on: bool):
+		if on != game.is_invincible:
+			game.toggle_god_mode())
+	_opt_fly.toggled.connect(func(on: bool): game.toggle_fly_mode(on))
 	_opt_normal.toggled.connect(func(on: bool):
 		if not _syncing:
 			game.set_normal_maps_enabled(on)
@@ -729,6 +847,10 @@ func _build_menu(root: Control) -> void:
 	_opt_invert.toggled.connect(func(on: bool):
 		if not _syncing:
 			game.gamepad.invert_y = on
+			game.save_game_options())
+	_opt_hud.toggled.connect(func(on: bool):
+		if not _syncing:
+			set_hud_visible(on)
 			game.save_game_options())
 	_opt_sens.value_changed.connect(func(v: float):
 		_opt_sens_val.text = "%.1f" % v
@@ -807,10 +929,13 @@ func _update_fullscreen_button() -> void:
 
 func sync_options() -> void:
 	_syncing = true
+	_opt_god.set_pressed_no_signal(game.is_invincible)
+	_opt_fly.set_pressed_no_signal(game.fly_mode)
 	_opt_normal.button_pressed = game.normal_maps_enabled
 	_opt_music.button_pressed = game.audio.is_music_on()
 	_opt_vibration.button_pressed = game.gamepad.vibration_enabled
 	_opt_invert.button_pressed = game.gamepad.invert_y
+	_opt_hud.button_pressed = is_hud_visible()
 	_opt_sens.value = game.gamepad.sensitivity
 	_opt_sens_val.text = "%.1f" % game.gamepad.sensitivity
 	_syncing = false
