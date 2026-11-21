@@ -9,7 +9,10 @@
 
 **No download. No sideloading. No account.** Open the link in **Meta Quest Browser**, press **Enter VR**, and descend.
 
+### 🥽 [Now available on SideQuest for Meta Quest](https://sidequestvr.com/app/64231/dungeon-stomp)
+
 [![Play WebXR](https://img.shields.io/badge/%E2%96%B6%20PLAY-WebXR%20in%20Browser-ff3b30?style=for-the-badge)](https://moonwho101.github.io/DungeonStompGodot/)
+[![SideQuest](https://img.shields.io/badge/SideQuest-Get%20it%20on%20Quest-ff6f00?style=for-the-badge&logo=meta&logoColor=white)](https://sidequestvr.com/app/64231/dungeon-stomp)
 [![Meta Quest 3](https://img.shields.io/badge/Meta%20Quest%203-Native%20APK-1c1e20?style=for-the-badge&logo=meta&logoColor=white)](#-meta-quest-3--native-apk)
 [![Windows](https://img.shields.io/badge/Windows-Desktop%20%2B%20PCVR-0078d4?style=for-the-badge&logo=windows&logoColor=white)](#-windows-desktop--pcvr)
 [![Godot 4.7.2](https://img.shields.io/badge/Godot-4.7.2-478cbf?style=for-the-badge&logo=godotengine&logoColor=white)](https://godotengine.org)
@@ -83,7 +86,7 @@ Without a headset, the same page plays as a flat-screen game with keyboard and m
 
 ## 🥽 Meta Quest 3 — native APK
 
-For the full-fidelity standalone experience, build and sideload the native Android version. Look around with your head, move with the left stick, and turn with the right. **Your right controller is your weapon.** Equip a spell, and the same hand becomes your aim.
+For the full-fidelity standalone experience, **[install Dungeon Stomp from SideQuest](https://sidequestvr.com/app/64231/dungeon-stomp)**, or build and sideload the native Android version yourself. Look around with your head, move with the left stick, and turn with the right. **Your right controller is your weapon.** Equip a spell, and the same hand becomes your aim.
 
 | Quest control | Action |
 |---|---|
