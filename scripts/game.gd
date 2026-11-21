@@ -77,7 +77,8 @@ var gamepad: GamepadInput
 var world_root: Node3D
 var camera: Camera3D
 var environment: Environment
-var xr_rig: XRRig = null # non-null when running in VR through OpenXR
+var xr_rig: XRRig = null # non-null while in VR (OpenXR at startup, or an active WebXR session)
+var webxr: WebXRInterface # web build only
 
 var texture_manager := Parsers.TextureManager.new()
 var objects_parser := Parsers.ObjectsDatParser.new()
@@ -252,6 +253,78 @@ func _setup_scene() -> void:
 	gamepad = GamepadInput.new()
 	gamepad.game = self
 	add_child(gamepad)
+	if OS.has_feature("web"):
+		_setup_webxr()
+
+
+# ---------------------------------------------------------------- WebXR (web build)
+# The browser only allows an immersive session from a user gesture, so the menu's VR button starts it and the
+# XR rig is created/destroyed with the session; the desktop camera and UI are used outside it.
+
+func _setup_webxr() -> void:
+	webxr = XRServer.find_interface("WebXR") as WebXRInterface
+	if webxr == null:
+		ui.set_webxr_state("WebXR unavailable", false)
+		return
+	webxr.session_supported.connect(_webxr_supported)
+	webxr.session_started.connect(_webxr_started)
+	webxr.session_ended.connect(_webxr_ended)
+	webxr.session_failed.connect(_webxr_failed)
+	webxr.is_session_supported("immersive-vr")
+
+
+func _webxr_supported(mode: String, supported: bool) -> void:
+	if mode == "immersive-vr":
+		ui.set_webxr_state("Enter VR" if supported else "VR not supported by this browser", supported)
+
+
+func enter_webxr() -> void:
+	if webxr == null:
+		return
+	webxr.session_mode = "immersive-vr"
+	webxr.requested_reference_space_types = "local-floor, local"
+	webxr.optional_features = "local-floor"
+	ui.set_webxr_state("Starting VR...", false)
+	if not webxr.initialize():
+		_webxr_failed("Could not request an immersive VR session.")
+
+
+func _webxr_started() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	xr_rig = XRRig.new()
+	xr_rig.name = "XRRig"
+	xr_rig.game = self
+	xr_rig.webxr = true
+	add_child(xr_rig)
+	camera.current = false
+	ui.move_to_viewport(xr_rig.ui_viewport)
+	xr_rig.attach_hud_overlays(ui)
+	ui.set_webxr_state("Enter VR", true, false)
+	update_weapon_mesh()
+	print("WebXR session started: ", webxr.reference_space_type)
+
+
+func _webxr_ended() -> void:
+	get_viewport().use_xr = false
+	if xr_rig != null:
+		xr_rig.detach_hud_overlays()
+		ui.restore_hud_panels()
+		ui.move_to_viewport(self)
+		var old_rig := xr_rig
+		xr_rig = null
+		update_weapon_mesh()
+		old_rig.queue_free()
+		camera.current = true
+	if playing:
+		pause_game_session()
+	ui.set_webxr_state("Enter VR", true)
+	print("WebXR session ended")
+
+
+func _webxr_failed(message: String) -> void:
+	push_error("WebXR session failed: " + message)
+	ui.set_webxr_state("Enter VR (retry)", true)
+	ui.set_status("VR failed: " + message)
 
 
 func _exit_tree() -> void:

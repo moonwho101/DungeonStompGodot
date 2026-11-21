@@ -1,7 +1,8 @@
-# OpenXR support: head-tracked view, controller locomotion, a controller-held player weapon rendered in a
-# fixed MD2 pose (frame 0, never animated - the controller supplies all motion), physical swing melee and a
-# world-space panel for the 2D UI. Only created when an OpenXR runtime is available; otherwise the desktop
-# camera path is used unchanged.
+# XR support (OpenXR on desktop/Quest, WebXR in the browser): head-tracked view, controller locomotion, a
+# controller-held player weapon rendered in a fixed MD2 pose (frame 0, never animated - the controller supplies
+# all motion), physical swing melee and a world-space panel for the 2D UI. Only created while an XR session is
+# active (OpenXR at startup, WebXR when the menu's VR button starts a session); otherwise the desktop camera
+# path is used unchanged.
 #
 # The game's existing `camera` keeps acting as the player body/head proxy (collision, saves, minimap and AI all
 # read it). Each frame the rig moves the XR origin so the tracked head sits on that proxy, and copies the head
@@ -52,6 +53,7 @@ const STAT_BAR_ANGLES := Vector2(0.0, -30.0) # top edge (centre) of the stat bar
 
 var game # Game (untyped to avoid a class cycle)
 var simulated := false # --xr-simulate: build the rig without a runtime, using fixed head/hand poses
+var webxr := false # created for a browser WebXR session (see Game._webxr_started) rather than OpenXR
 var origin: XROrigin3D
 var head: XRCamera3D
 var left_hand: XRController3D
@@ -109,9 +111,10 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not simulated:
 		get_viewport().use_xr = true
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	if not simulated and not webxr:
 		# Lets the runtime's fixed/dynamic foveation (xr/openxr/foveation_*) apply on the Mobile renderer.
 		get_viewport().vrs_mode = Viewport.VRS_XR
-		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 		var xr := XRServer.find_interface("OpenXR") as OpenXRInterface
 		if xr != null:
 			xr.render_target_size_multiplier = RENDER_SCALE
@@ -208,6 +211,16 @@ func attach_hud_overlays(ui) -> void:
 	_add_overlay(ui.take_hud_panel(), STAT_BAR_ANGLES, Vector2(0.0, 1.0))
 	_add_overlay(ui.take_minimap(), MINIMAP_ANGLES, Vector2(1.0, 1.0))
 	_add_overlay(ui.take_info_panel(), DEBUG_PANEL_ANGLES, Vector2(-1.0, 1.0))
+
+
+# Undoes attach_hud_overlays when a WebXR session ends; the caller then hands the controls back to the UI
+# (GameUI.restore_hud_panels) before this rig, and the overlay viewports with it, are freed.
+func detach_hud_overlays() -> void:
+	for o: Dictionary in overlays:
+		var control: Control = o.control
+		control.resized.disconnect(_fit_overlay.bind(o))
+		control.visibility_changed.disconnect(_sync_overlay_visibility.bind(o))
+	overlays.clear()
 
 
 # anchor: which point of the quad sits at the given angles, in quad half-extents (-1..1; x right, y up).
@@ -498,8 +511,10 @@ func poll(delta: float, paused: bool) -> Dictionary:
 	var b := _just(right_grip, "by_button")
 	var x := _just(left_hand, "ax_button")
 	var y := _just(left_hand, "by_button")
-	var l3 := _just(left_hand, "primary_click")
-	var r3 := _just(right_grip, "primary_click")
+	# WebXR exposes the standard gamepad names instead of the OpenXR action map's.
+	var stick_click := "thumbstick_click" if webxr else "primary_click"
+	var l3 := _just(left_hand, stick_click)
+	var r3 := _just(right_grip, stick_click)
 	_update_pointer(trigger_down)
 
 	if paused:
@@ -510,8 +525,9 @@ func poll(delta: float, paused: bool) -> Dictionary:
 				game.ui.on_back_or_resume()
 		return {}
 
-	var move := _stick(left_hand.get_vector2("primary"))
-	var look := _stick(right_grip.get_vector2("primary"))
+	var stick := "thumbstick" if webxr else "primary"
+	var move := _stick(left_hand.get_vector2(stick))
+	var look := _stick(right_grip.get_vector2(stick))
 	if l3:
 		_sprint_toggle = not _sprint_toggle
 	if _sprint_toggle and move.length() < 0.05:

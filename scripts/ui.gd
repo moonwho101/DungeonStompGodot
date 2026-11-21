@@ -4,6 +4,7 @@ extends CanvasLayer
 
 const AMBER := Color("#f59e0b")
 const SHOW_DEBUG_PANEL := false # top-left info panel (mode, position, depth, objects); set false to hide it
+const WEB_MENU_SCALE := 3.0 # web build only: the browser canvas is much smaller than the 4K layout, so enlarge the menu
 
 const VIGNETTE_SHADER := """
 shader_type canvas_item;
@@ -70,6 +71,8 @@ var _toast_timer := 0.0
 
 # Menu
 var _menu: PanelContainer
+var _web_menu_font: FontFile
+var _menu_original_fonts: Dictionary[Control, Font] = {}
 var _views: Dictionary = {}
 var _current_view := "main"
 var _prompt: Label
@@ -78,6 +81,7 @@ var _btn_new: Button
 var _btn_resume: Button
 var _btn_generator: Button
 var _btn_options: Button
+var _btn_webxr: Button # web build only: starts a WebXR session
 var _btn_generate: Button
 var _btn_gen_back: Button
 var _gen_size: HSlider
@@ -114,6 +118,8 @@ func _ready() -> void:
 	_build_hud(root)
 	_build_loading(root)
 	_build_menu(root)
+	if OS.has_feature("web"):
+		_prepare_web_menu_font()
 	_build_toast(root)
 	get_viewport().size_changed.connect(_on_resize)
 	_on_resize()
@@ -160,6 +166,7 @@ func _on_resize() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	_flash_mat.set_shader_parameter("rect_size", vs)
 	_fit_hud()
+	_fit_menu()
 
 
 # ---------------------------------------------------------------- Overlays
@@ -480,9 +487,16 @@ func _fit_hud() -> void:
 
 
 var _hud_detached := false
+var _detached_panels: Array[Dictionary] = [] # layout of each detached control, for restore_hud_panels
 
 # The take_* functions move a HUD element out of the full-screen UI so VR can show it on its own panel.
 func _detach(c: Control) -> Control:
+	_detached_panels.append({
+		"control": c, "parent": c.get_parent(), "index": c.get_index(),
+		"anchors": [c.anchor_left, c.anchor_top, c.anchor_right, c.anchor_bottom],
+		"offsets": [c.offset_left, c.offset_top, c.offset_right, c.offset_bottom],
+		"scale": c.scale, "pivot": c.pivot_offset,
+	})
 	c.get_parent().remove_child(c)
 	c.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	c.position = Vector2.ZERO
@@ -504,6 +518,37 @@ func take_minimap() -> Control:
 
 func take_info_panel() -> PanelContainer:
 	return _detach(_info_panel)
+
+
+# Puts the detached HUD elements back into the full-screen UI (a WebXR session ended).
+func restore_hud_panels() -> void:
+	for panel in _detached_panels:
+		var c: Control = panel.control
+		c.get_parent().remove_child(c)
+		var parent: Node = panel.parent
+		parent.add_child(c)
+		parent.move_child(c, mini(panel.index, parent.get_child_count() - 1))
+		c.anchor_left = panel.anchors[0]
+		c.anchor_top = panel.anchors[1]
+		c.anchor_right = panel.anchors[2]
+		c.anchor_bottom = panel.anchors[3]
+		c.offset_right = panel.offsets[2]
+		c.offset_bottom = panel.offsets[3]
+		c.offset_left = panel.offsets[0]
+		c.offset_top = panel.offsets[1]
+		c.scale = panel.scale
+		c.pivot_offset = panel.pivot
+	_detached_panels.clear()
+	_hud_detached = false
+	_fit_hud()
+
+
+# Reparents the UI between the desktop window and the XR rig's UI panel viewport.
+func move_to_viewport(parent: Node) -> void:
+	get_viewport().size_changed.disconnect(_on_resize)
+	reparent(parent)
+	get_viewport().size_changed.connect(_on_resize)
+	_on_resize()
 
 
 # Shows/hides every HUD element: bottom bar, minimap, info panel and crosshair.
@@ -616,6 +661,37 @@ func _set_fill(fill: ColorRect, pct: float) -> void:
 
 # ---------------------------------------------------------------- Menu
 
+func _prepare_web_menu_font() -> void:
+	# Web SystemFont uses the engine fallback; copy its vector data, not the shared VR font, and render it as
+	# MSDF so the WEB_MENU_SCALE-enlarged menu stays sharp.
+	_web_menu_font = ThemeDB.fallback_font.duplicate() as FontFile
+	assert(_web_menu_font != null, "The engine fallback must be a vector FontFile")
+	_web_menu_font.multichannel_signed_distance_field = true
+	for control: Control in _menu.find_children("*", "Control", true, false):
+		if control.has_theme_font_override("font"):
+			_menu_original_fonts[control] = control.get_theme_font("font")
+	_fit_menu()
+
+
+# Web build only: enlarges the menu in the browser window (clamped to fit) and keeps it 1:1 on the VR panel.
+func _fit_menu() -> void:
+	if _menu == null or _web_menu_font == null:
+		return
+	var in_vr := get_viewport() is SubViewport
+	var s := 1.0
+	if not in_vr:
+		s = WEB_MENU_SCALE
+		var vs := get_viewport().get_visible_rect().size
+		if _menu.size.x > 0.0 and _menu.size.y > 0.0:
+			s = minf(s, minf(vs.x * 0.95 / _menu.size.x, vs.y * 0.95 / _menu.size.y))
+	_menu.pivot_offset = _menu.size * 0.5
+	_menu.scale = Vector2.ONE * s
+	for control: Control in _menu_original_fonts:
+		var font: Font = _menu_original_fonts[control] if in_vr else _web_menu_font
+		if control.get_theme_font("font") != font:
+			control.add_theme_font_override("font", font)
+
+
 func _menu_button(text: String, primary: bool = false) -> Button:
 	var b := Button.new()
 	b.text = text.to_upper()
@@ -722,6 +798,7 @@ func _build_menu(root: Control) -> void:
 	_menu.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_menu.mouse_filter = Control.MOUSE_FILTER_STOP
 	_menu.gui_input.connect(_on_menu_gui_input)
+	_menu.resized.connect(_fit_menu)
 	root.add_child(_menu)
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 10)
@@ -748,8 +825,14 @@ func _build_menu(root: Control) -> void:
 	_btn_options = _menu_button("Options")
 	for b in [_btn_new, _btn_resume, _btn_generator, _btn_options]:
 		main.add_child(b)
+	if OS.has_feature("web"):
+		_btn_webxr = _menu_button("Checking VR support...")
+		_btn_webxr.disabled = true
+		_btn_webxr.pressed.connect(func(): game.enter_webxr())
+		main.add_child(_btn_webxr)
 	var exit_button := _menu_button("Exit Game")
 	exit_button.pressed.connect(func(): game.quit_game())
+	exit_button.visible = not OS.has_feature("web") # a browser tab can't be quit
 	main.add_child(exit_button)
 	_status = _label("", _font, 17, Color("#38bdf8"))
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -796,6 +879,9 @@ func _build_menu(root: Control) -> void:
 	opts.add_child(_h3("Options"))
 	_opt_normal = _checkbox("Normal Maps (N)")
 	_opt_music = _checkbox("Music (P / M)")
+	if OS.has_feature("web"):
+		_opt_music.text = "Music unavailable in web build"
+		_opt_music.disabled = true
 	_opt_vibration = _checkbox("Controller Vibration (Rumble)")
 	_opt_invert = _checkbox("Invert Look Y")
 	_opt_hud = _checkbox("Show Player HUD (H)")
@@ -968,6 +1054,14 @@ func is_menu_visible() -> bool:
 
 func set_prompt(text: String) -> void:
 	_prompt.text = text
+
+
+# Web build only: updates the main menu's VR button (no-op elsewhere, where the button doesn't exist).
+func set_webxr_state(text: String, enabled: bool, show: bool = true) -> void:
+	if _btn_webxr != null:
+		_btn_webxr.text = text.to_upper()
+		_btn_webxr.disabled = not enabled
+		_btn_webxr.visible = show
 
 
 func set_status(text: String) -> void:
