@@ -115,7 +115,8 @@ func _ready() -> void:
 	if not simulated and not webxr:
 		# Lets the runtime's fixed/dynamic foveation (xr/openxr/foveation_*) apply on the Mobile renderer.
 		get_viewport().vrs_mode = Viewport.VRS_XR
-		var xr := XRServer.find_interface("OpenXR") as OpenXRInterface
+		# Untyped: the OpenXRInterface class doesn't exist in web export templates, so naming it breaks parsing there.
+		var xr = XRServer.find_interface("OpenXR")
 		if xr != null:
 			xr.render_target_size_multiplier = RENDER_SCALE
 			xr.session_begun.connect(_apply_refresh_rate.bind(xr))
@@ -156,15 +157,15 @@ func _ready() -> void:
 
 
 # Picks REFRESH_RATE, or the fastest offered rate below it. The list is empty until the session has begun.
-func _apply_refresh_rate(xr: OpenXRInterface) -> void:
+func _apply_refresh_rate(xr) -> void:
 	var best := 0.0
-	for r in xr.get_available_display_refresh_rates():
+	for r: float in xr.get_available_display_refresh_rates():
 		if r <= REFRESH_RATE + 0.5 and r > best:
 			best = r
 	if best > 0.0 and not is_equal_approx(xr.display_refresh_rate, best):
 		xr.display_refresh_rate = best
 	if best > 0.0:
-		var size := xr.get_render_target_size()
+		var size: Vector2 = xr.get_render_target_size()
 		print("OpenXR: %.0f Hz, render scale %.2f, %dx%d per eye" % [xr.display_refresh_rate,
 			xr.render_target_size_multiplier, size.x, size.y])
 
