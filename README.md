@@ -53,9 +53,16 @@ Launch **Dungeon Stomp** from **Unknown Sources** on the headset. No PC connecti
 <details>
 <summary><strong>Inside the Web export: what the Godot preset produces</strong></summary>
 
-The **`DungeonStomp`** preset (capital D and S) targets **Web**. It exports `index.html` with a JavaScript loader, WebAssembly engine, and PCK. It uses a single-threaded build, with extension support and progressive web app mode disabled. Host the exported files together over HTTPS; immersive WebXR needs a secure context and a user gesture to start.
+The **`DungeonStomp`** preset (capital D and S) targets **Web**. It exports `index.html` with a JavaScript loader, WebAssembly engine, and PCK. It uses a single-threaded build, with extension support and progressive web app mode disabled. Godot renders the web build with its Compatibility renderer. Host the exported files together over HTTPS; immersive WebXR needs a secure context and a user gesture to start.
 
-**The preset alone does not reproduce the hosted VR experience.** The checked-in [XR rig](scripts/xr_rig.gd) initializes OpenXR, not a browser WebXR session, and the [raw-data packer](addons/data_export/plugin.gd) runs only for Android. A self-hosted immersive build also needs WebXR session startup and the classic game data packaged where [the loader](scripts/data_paths.gd) can read it.
+```powershell
+godot --headless --path . --export-release "DungeonStomp" index.html
+```
+
+- **VR button:** In the web build only, the main menu shows an **Enter VR** button. It reports when the browser has no immersive VR support, starts the WebXR session when pressed, and returns you to the desktop menu (paused) when you leave the headset session. Desktop and Quest builds don't show it.
+- **Controls:** The [XR rig](scripts/xr_rig.gd) is created when the WebXR session starts and reads the browser's standard `thumbstick`/`thumbstick_click` inputs; the buttons and triggers match the native VR controls.
+- **Data:** The [data export plugin](addons/data_export/plugin.gd) packs the raw `Assets/`, `bin/`, and `Sounds/` files the loaders need into the web PCK, which [the loader](scripts/data_paths.gd) reads from `res://`. Keep the plugin enabled when exporting. `Midi/` is left out to keep the PCK under GitHub's 100 MB per-file limit, so music is unavailable in the web build; sound effects still play.
+- **Menu:** In the browser window the menu is enlarged (up to 3×, clamped to fit) with sharp MSDF text; inside the headset it keeps its normal VR size.
 
 </details>
 

@@ -87,6 +87,8 @@ func _run_tests() -> void:
 			"door slide decodes for one-shot playback: " + file)
 
 	_xr_tests(models)
+	await _webxr_ui_transition_test()
+	_webxr_input_test()
 	_effect_pool_tests()
 
 	TDSModel.clear_cache()
@@ -463,6 +465,87 @@ func _monster_movement_tests(model: MD2Model) -> void:
 			"subdivided strafing preserves movement speed at %d FPS" % fps)
 	game.world_root.free()
 	Monster.clear_shared()
+
+
+# Web build: the menu's VR button moves the UI into a WebXR rig and back. The web-only menu font/scale path is
+# exercised directly since the headless runner isn't a web build.
+func _webxr_ui_transition_test() -> void:
+	var host := Node3D.new()
+	root.add_child(host)
+	var ui := GameUI.new()
+	host.add_child(ui)
+	check(ui._btn_webxr == null, "VR menu button only exists in the web build")
+	ui.set_webxr_state("Enter VR", true)
+	var original_font := ui._btn_new.get_theme_font("font")
+	ui._prepare_web_menu_font()
+	await process_frame
+	await process_frame
+	check(ui._web_menu_font != ThemeDB.fallback_font and ui._web_menu_font.multichannel_signed_distance_field and
+		ui._btn_new.get_theme_font("font") == ui._web_menu_font and not original_font.multichannel_signed_distance_field,
+		"Web menu uses a private MSDF font and leaves the VR font unchanged")
+	var vs := root.get_visible_rect().size
+	var desktop_scale := ui._menu.scale.x
+	check(desktop_scale > 1.0 and desktop_scale <= GameUI.WEB_MENU_SCALE and
+		ui._menu.get_global_rect().size.x <= vs.x and ui._menu.get_global_rect().size.y <= vs.y,
+		"Web desktop menu is enlarged but fits the window (scale %.2f)" % desktop_scale)
+	check(ui._menu.get_global_rect().get_center().is_equal_approx(vs * 0.5), "Enlarged web menu stays centred")
+	var minimap := ui._minimap_box
+	var parent := minimap.get_parent()
+	var offsets := [minimap.offset_left, minimap.offset_top, minimap.offset_right, minimap.offset_bottom]
+	for iteration in 2:
+		var rig := XRRig.new()
+		rig.simulated = true
+		rig.webxr = true
+		host.add_child(rig)
+		ui.move_to_viewport(rig.ui_viewport)
+		rig.attach_hud_overlays(ui)
+		await process_frame
+		check(ui._menu.scale == Vector2.ONE and ui._btn_new.get_theme_font("font") == original_font,
+			"WebXR session shows the menu at its VR size and font (%d)" % iteration)
+		check(minimap.get_parent() != parent and rig.overlays.size() == 3, "WebXR session detaches HUD panels (%d)" % iteration)
+		rig.detach_hud_overlays()
+		ui.restore_hud_panels()
+		ui.move_to_viewport(host)
+		await process_frame
+		check(is_equal_approx(ui._menu.scale.x, desktop_scale) and ui._btn_new.get_theme_font("font") == ui._web_menu_font,
+			"Ending the WebXR session restores the web menu (%d)" % iteration)
+		check(minimap.get_parent() == parent and not ui._hud_detached and rig.overlays.is_empty() and
+			[minimap.offset_left, minimap.offset_top, minimap.offset_right, minimap.offset_bottom] == offsets,
+			"Ending the WebXR session restores the desktop HUD layout (%d)" % iteration)
+		rig.free()
+	host.free()
+
+
+class _XRTestMenu:
+	func is_menu_visible() -> bool:
+		return false
+
+
+# WebXR controllers report standard gamepad names ("thumbstick") instead of the OpenXR action map's ("primary").
+func _webxr_input_test() -> void:
+	var tracker := XRControllerTracker.new()
+	tracker.type = XRServer.TRACKER_CONTROLLER
+	tracker.name = &"test_webxr_left_hand"
+	XRServer.add_tracker(tracker)
+	var rig := XRRig.new()
+	rig.simulated = true
+	rig.game = {"ui": _XRTestMenu.new(), "world_ready": true, "fly_mode": false}
+	root.add_child(rig)
+	rig.left_hand.tracker = tracker.name
+	tracker.set_input("thumbstick", Vector2(0, 1))
+	tracker.set_input("primary", Vector2(1, 0))
+	rig.webxr = true
+	var web := rig.poll(0.016, false)
+	check(is_zero_approx(web.move_x) and web.move_y < -0.9, "WebXR moves with the thumbstick input")
+	rig.webxr = false
+	var native := rig.poll(0.016, false)
+	check(native.move_x > 0.9 and is_zero_approx(native.move_y), "OpenXR still moves with the primary action")
+	rig.webxr = true
+	rig._prev_buttons.clear()
+	tracker.set_input("thumbstick_click", true)
+	check(rig.poll(0.016, false).sprint, "WebXR thumbstick click toggles sprint")
+	rig.free()
+	XRServer.remove_tracker(tracker)
 
 
 # VR logic that doesn't need a headset: fixed weapon pose, grip fit, swing detection and blade hits.

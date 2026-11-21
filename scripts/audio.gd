@@ -10,7 +10,7 @@ const MUSIC_TRACKS := ["Midi/d1.wav", "Midi/d2.wav", "Midi/d3.wav", "Midi/d4.wav
 var _streams: Dictionary = {} # rel path -> AudioStream or null
 var _players: Array = []
 var _world_players: Array[AudioStreamPlayer3D] = []
-var music_enabled := true
+var music_enabled := not OS.has_feature("web") # the web export does not pack Midi/ (download size)
 var _music_player: AudioStreamPlayer
 var _music_playing := false
 var _music_delay := 0.0
@@ -248,6 +248,8 @@ func stop_music() -> void:
 
 
 func toggle_music() -> bool:
+	if OS.has_feature("web"):
+		return false
 	music_enabled = not music_enabled
 	if not music_enabled:
 		stop_music()

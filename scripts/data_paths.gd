@@ -1,7 +1,7 @@
 # Locates the game data (Assets/, bin/, Sounds/, Midi/) on disk.
 # These folders are excluded from Godot's importer (.gdignore), so every file is read at runtime,
 # exactly like the browser version fetches them. In the editor they live in the project folder;
-# a desktop export looks next to the executable, and an Android export reads them from the .pck.
+# a desktop export looks next to the executable, and Android/Web exports read them from the .pck.
 class_name DataPaths
 extends RefCounted
 
@@ -12,6 +12,10 @@ static var _asset_index_built: bool = false
 
 static func root() -> String:
 	if _root != "":
+		return _root
+	# Web exports carry the data inside the .pck (see addons/data_export).
+	if OS.has_feature("web"):
+		_root = "res://"
 		return _root
 	var candidates: Array[String] = []
 	var res_root := ProjectSettings.globalize_path("res://")
