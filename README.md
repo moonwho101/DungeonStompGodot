@@ -1,275 +1,86 @@
-<div align="center">
+# Dungeon Stomp
 
-# ⚔️ Dungeon Stomp (Godot 4.7.2)
+Hear a sorcerer around the corner. Ready a spell for the far end of the hall, or close the distance and swing. **Dungeon Stomp** is Mark Longo's first-person dungeon crawler, rebuilt in Godot for standalone **Meta Quest 3** VR and Windows desktop. Its original monsters, maps, and sounds share a dungeon with seeded levels, positional audio, and a sword that follows your hand.
 
-### A classic 3D first-person dungeon crawler rebuilt natively for Godot Engine 4.7.2.
+**[Build the native Quest 3 edition](#meta-quest-3--native-android)** · **[Play WebXR on itch.io](https://moonwho101.itch.io/dungeon-stomp-vr)** · **[Play in a regular browser on itch.io](https://moonwho101.itch.io/dungeon-stomp-threejs)** · **[Run on Windows](#windows-desktop)**
 
-**Procedural Dungeons · Real-Time Combat · 30 Monster Families · Godot 4 Forward+ · Pure GDScript · Native Windows Desktop**
+![First-person view down a lit dungeon corridor in Dungeon Stomp, with the player HUD and radar minimap visible](verification/screenshots/s6.png)
 
-![Godot Engine](https://img.shields.io/badge/Godot-4.7.2-478CBF?logo=godotengine&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Windows%20x86__64-0078D7?logo=windows&logoColor=white)
-![Language](https://img.shields.io/badge/Language-Pure%20GDScript-478CBF?logo=godotengine&logoColor=white)
-![Renderer](https://img.shields.io/badge/Renderer-Forward%2B%203D-success)
-![License](https://img.shields.io/badge/license-MIT-blue)
+## Your first descent
 
-<br>
+1. **Explore.** Start a new game, or choose a seed and room count in the Dungeon Generator. Check side rooms for chests. Listen before opening the next door: a monster's call comes from its position in the dungeon.
+2. **Fight and loot.** Use an axe or sword up close; switch to Magic Missile, Fireball, or Lightning at range. Watch how enemies react: a wounded goblin can flee, while an alerted skeleton can bring its pack into the fight.
+3. **Find the portal.** The blue arrow on the minimap points toward the exit. When it turns into a pulsing target, you're close. Step through to descend a level. **Resume** brings back your stats and gear, along with the doors you opened, chests you looted, and monsters you defeated.
 
-<img src="verification/screenshots/s6.png" alt="Dungeon Stomp Godot gameplay: first-person view down a glowing dungeon corridor with a minimap and HUD" width="860">
+## Meta Quest 3 — native Android
 
-</div>
+**Choose the native APK for standalone play on the headset.** Look around with your head, move with the left stick, and turn with the right. Your right controller holds the weapon: a sword hits when its blade crosses a monster during a swing, not when you press a button. Equip a spell instead and the same hand becomes your aim.
 
----
+| Quest control | Action |
+|---|---|
+| Swing the right controller | Strike with the equipped melee weapon |
+| Right trigger | Cast the equipped spell, or select an item on the floating menu |
+| Left stick / click | Move relative to where you're looking / toggle sprint |
+| Right stick left or right | Smooth turn |
+| A / B | Jump / open a door or chest |
+| X / Y | Previous / next weapon or spell |
+| Left trigger or left menu button | Pause or resume |
 
-## 📖 Overview
+**Build and install.** Import [project.godot](project.godot) in Godot **4.7.2**, install matching export templates, and configure Godot's Android SDK and Java SDK paths. In **Project → Export**, select **`dungeonstomp`** (lowercase) and export a debug APK. With Developer Mode enabled on your Quest and USB debugging authorized, install it from the export directory:
 
-**Dungeon Stomp (Godot)** is a complete, native first-person 3D dungeon crawler built from the ground up for **Godot 4.7.2** using pure **GDScript**. It is a modern engine revival of the classic Direct3D dungeon crawler by [Mark Longo (moonwho101)](https://github.com/moonwho101), faithfully recreating the original gameplay, levels, models, textures, and sounds with modern engine capabilities.
-
-Everything runs natively in Godot with zero external plugin dependencies: original level maps, object definitions, Quake II MD2 animated meshes with GPU vertex interpolation, 3DS models, and sound tables are parsed directly at runtime.
-
-Swing a flaming sword, hurl fireballs, cast lightning, and stomp through endless **procedurally generated dungeons** crawling with monsters, traps, and treasure.
-
-Players and monsters falling more than 1,000 units below the map's lowest collision geometry return to its `startpos` with velocity cleared and health unchanged. Monster attack range includes vertical separation (measured from each actor's feet), both when starting an attack and when delivering a melee hit or releasing a spell.
-
-Monster pursuit and strafing use collision-checked movement steps no larger than half their capsule radius, preventing low-FPS frames from carrying them through thin walls.
-
----
-
-## ✨ Features
-
-- 🏰 **Infinite Procedural Dungeons:** Generate complete dungeons on the fly with seedable layouts, configurable room counts, corridors, teleporters, doors, and exit portals. Descend deeper into the dungeon where monsters grow stronger and rewards grow greater.
-- ⚔️ **Real-Time Combat & Full Arsenal:** 10 distinct melee weapons (Axe, Flamesword, Bastard Sword, Battle Axe, Ice Sword, Lightning Sword, Morning Star, Spiked Flail, Split Sword, and Super Flamesword) with authentic first-person bobbing, swinging animations, and impact effects.
-- 🔮 **Spellcasting System:** Cast devastating real-time spells including **Magic Missile**, **Fireball**, **Lightning**, and **Healing** with physics-driven projectile trajectories and splash damage.
-- **Listen around corners:** Monster calls, swings, spell windups, and explosions come from their position in the dungeon. Turn your head in VR to locate a caster before the projectile arrives. Music, menu sounds, and pickup chimes stay centered.
-- 🧟 **30 Monster Families:** Ogres, hydras, dragons, necromancers, demonesses, faeries, mummies, wraiths, goblins, skeletons, wolves, tentacle horrors, and more. Features state-machine AI with patrol, pursuit, melee attacks, and ranged spellcasting.
-  Once alerted, standing or running monsters have a 5% chance per eligible second to flip, salute, taunt, wave, or point. Monsters pause their pursuit or strafing to gesture in place, sometimes with a call, then resume moving. Attacks can still interrupt a gesture.
-  To tune a spellcaster, edit `spellLevel` in its `CONFIGS` entry in [monster.gd](scripts/monster.gd). Use `basic` for the original recovery after a ranged cast, `heavy` for half that recovery, or `savage` for one eighth. Spell windup and damage stay the same. Melee-only monsters do not gain spells.
-- 🎭 **Monster Personalities:** Each monster family has its own personality, set by the `personality` key in its `CONFIGS` entry in [monster.gd](scripts/monster.gd). The personality is shown in color above the health bar and changes stats, XP, and behavior. Monsters may shout a line in character when they spot you:
-  - **Brute** (Bauul, Ogre, Dragon): more health and damage, but slower.
-  - **Berserker** (Tentacle, Ogro, Insect, Demon, Craz): becomes enraged below half health, moving faster, hitting harder, and attacking more often.
-  - **Coward** (Goblin, Slave, Imp): runs away once when badly hurt, then returns to fight.
-  - **Cunning** (Sorcerer, Wraith, Faerie, Okta): melee monsters zig-zag toward you; spellcasters only gain damage and XP.
-  - **Show-off** (Phantom, Demoness, Fulimo, Sorb): gestures and taunts much more often.
-  - **Pack Leader** (Skeleton, Wolf, Necromancer, Rider): alerts idle monsters nearby.
-  - **Drowsy** (Corpse, Oluve, Mummy): notices you late and moves slowly.
-  - **Vigilant** (Knight, Hydra, Cobra, Centaur): notices you from farther away.
-
-  To tune a personality's stats and lines, edit `PERSONALITIES` in [monster.gd](scripts/monster.gd).
-- 💡 **Godot Forward+ 3D Rendering:** Dynamic lighting with flickering lamp glare, normal map support (`ds_normal_maps` shader global), particle effects for blood splatters and spell bursts, and atmospheric distance fog.
-- 🧭 **Retro HUD & Radar Minimap:** Follow the blue arrow on the rim toward the exit portal. When you get close, it becomes a pulsing blue target at the portal's map location. Both appear above walls, loot, enemies, and the player marker.
-- 💾 **Persistent Adventure State:** Automatically saves run progress to `user://` — slain monsters, looted chests, unlocked doors, and player stats persist across sessions and depth transitions.
-- 🎮 **Full Input & Controller Support:** Native keyboard/mouse and gamepad support (Xbox, PlayStation DualSense/DualShock, Nintendo Switch Pro) with analog movement, stick aiming, haptics/rumble, and menu navigation.
-
----
-
-## 🏗️ Architecture & Godot Engine Implementation
-
-The game is written in pure GDScript and organized into modular engine subsystems:
-
-| Script | Subsystem | Description |
-|--------|-----------|-------------|
-| [scripts/game.gd](scripts/game.gd) | **Core Game Loop** | Main game state, scene initialization, player controller, weapon switching, combat resolution, and save/load serialization. |
-| [scripts/generator.gd](scripts/generator.gd) | **Procedural Generator** | Deterministic dungeon layout generator with seeded RNG, room carving, corridors, door placement, and monster/loot distribution. |
-| [scripts/parsers.gd](scripts/parsers.gd) | **Classic File Parsers** | Runtime binary and text parsers for classic `.map` levels, `Objects.dat` geometry, `modellist.dat`, `textures.dat`, and `.snd` files. |
-| [scripts/md2.gd](scripts/md2.gd) | **MD2 Model Engine** | Custom Quake II MD2 parser with GPU vertex-animation blending and mesh instantiation for monsters and weapons. |
-| [scripts/tds.gd](scripts/tds.gd) | **3DS Model Loader** | Custom binary 3D Studio (`.3ds`) parser that constructs Godot `ArrayMesh` resources on the fly. |
-| [scripts/collision.gd](scripts/collision.gd) | **Custom Physics & Collision** | Spatial-partitioned 3D grid with capsule-world collision response, gravity, stairs climbing, and line-of-sight raycasts. |
-| [scripts/monster.gd](scripts/monster.gd) | **Monster AI** | Finite state machine for monster behaviors (patrol, aggro, pursuit, melee attack, spellcasting, pain, and death). |
-| [scripts/materials.gd](scripts/materials.gd) | **Materials & Shaders** | Material generator matching classic lighting, normal mapping, diffuse blending, and transparency. |
-| [scripts/effects.gd](scripts/effects.gd) | **Visual FX & Lighting** | Dynamic point lights, flickering torch effects, blood splatters, spell projectile trails, and floating combat text. |
-| [scripts/ui.gd](scripts/ui.gd) | **User Interface** | Main menu, Options menu, Dungeon Generator menu, HUD bars, toast notifications, and death screen. |
-| [scripts/minimap.gd](scripts/minimap.gd) | **Circular Radar Minimap** | Custom 2D minimap renderer drawing walls, doors, chests, exit portals, monsters, and player orientation. |
-| [scripts/audio.gd](scripts/audio.gd) | **Audio Manager** | Sound effect playback, 3D positional audio, looping ambient tracks, and MIDI music management. |
-| [scripts/gamepad.gd](scripts/gamepad.gd) | **Gamepad Controller** | Controller detection, deadzone curve mapping, smooth stick look, trigger actions, rumble vibration, and menu navigation. |
-| [scripts/data_paths.gd](scripts/data_paths.gd) | **Asset Discovery** | Cross-platform resolution of `Assets/`, `bin/`, `Sounds/`, and `Midi/` runtime data directories. |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **[Godot Engine 4.7.2](https://godotengine.org/download)** (Standard 64-bit build recommended)
-- **Windows 10 / 11** (x86_64)
-
-### Running in the Godot Editor
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/moonwho101/DungeonStompGodot.git
-   cd DungeonStompGodot
-   ```
-2. Launch Godot 4.7.2 and click **Import**.
-3. Select the [project.godot](project.godot) file and choose **Import & Edit**.
-4. Press **F5** (or click the **Play** button in the top-right corner) to run [scenes/main.tscn](scenes/main.tscn).
-
-### Running the Standalone Windows Executable
-
-The repository includes pre-built Windows desktop binaries:
-
-- `DungeonStomp.exe` — The main game executable.
-- `DungeonStomp.console.exe` — Windows console wrapper for debugging and log output.
-
-> **Note:** The game data folders ([Assets/](Assets/), [bin/](bin/), [Sounds/](Sounds/), [Midi/](Midi/)) are loaded dynamically at runtime and must remain in the same folder as the executable.
-
-### Exporting Windows Desktop Builds
-
-You can export a fresh Windows build from the command line using Godot 4.7.2:
-
-```bash
-mkdir -p build/windows
-godot --headless --path . --export-debug "Windows Desktop" build/windows/DungeonStomp.exe
+```sh
+adb install -r "Dungeon Stomp.apk"
 ```
 
-Copy the runtime data folders alongside the exported binary:
-```bash
-cp -r Assets bin Sounds Midi build/windows/
-```
+Launch **Dungeon Stomp** from **Unknown Sources** on the headset. No PC connection is needed to play after installation.
 
-### Exporting Android / Meta Quest Builds
+<details>
+<summary><strong>Inside the Quest export: rendering, tracking, and game data</strong></summary>
 
-The `dungeonstomp` Android preset needs no extra copy step. The [data_export](addons/data_export/plugin.gd) editor plugin (enabled in `project.godot`) packs `Assets/`, `bin/`, `Sounds/` and `Midi/` into the `.pck` during Android exports, and `DataPaths` reads them from `res://`. The plugin is required because those folders carry `.gdignore`, which hides them from the normal exporter.
+- **Package:** The Android preset uses Gradle to build an `arm64-v8a` APK with XR mode enabled. The project version is `1.0.0`; the Android version code is `1`.
+- **Rendering:** The project selects Godot's Mobile renderer (Vulkan). The [OpenXR rig](scripts/xr_rig.gd) requests **90 Hz** when available and renders at **1.25×** the runtime's recommended per-eye dimensions. Dynamic foveation is enabled to reduce work away from the center of the view. These are settings, not a measured frame rate.
+- **Tracking:** The rig maps one tracked meter to 60 dungeon units. It measures the hand's movement relative to the head, so walking forward with a stationary sword doesn't count as a swing. Each swing can hit a given monster only once.
+- **Data:** The [data export plugin](addons/data_export/plugin.gd) packs the raw `Assets/`, `bin/`, `Sounds/`, and `Midi/` folders into the Android PCK. The game reads them from `res://`; there's nothing extra to copy to the headset.
 
-For Quest 3, use **Mobile** (Vulkan) or **Compatibility** (`gl_compatibility`, OpenGL ES). When switching, also set **Rendering > Renderer > Rendering Method.mobile** to the desired renderer: the mobile platform override can otherwise keep an Android export on Mobile.
+</details>
 
-The shared materials use a custom per-pixel Lambert light function to preserve falloff in the game's large world units; Godot's built-in Mobile Lambert path cuts off small FP16 attenuation values before multiplying by light energy. Compatibility uses unique materials for lamp glare, MD2 poses, and health bars instead of exhausting GLES's hardware-limited per-instance uniform buffer. Meshes, shaders, and textures remain shared. Do not enable **Force Vertex Shading**, which bypasses custom light functions.
+## WebXR — VR in the browser
 
-### Running Automated Headless Tests
+**[Open Dungeon Stomp VR on itch.io](https://moonwho101.itch.io/dungeon-stomp-vr)** in a WebXR-capable headset browser such as Meta Quest Browser. Launch the game from the page and allow the immersive VR session when prompted. This is the route to take if you want to try the dungeon on Quest without sideloading an APK.
 
-Run the headless test suite to verify parsers, collision math, model loaders, dungeon generation, fall recovery, and monster attack range:
+**No headset?** [Play Dungeon Stomp Three.js on itch.io](https://moonwho101.itch.io/dungeon-stomp-threejs). It's a separate JavaScript/WebGL edition for a regular browser, not the Godot Web export.
 
-```bash
-godot --headless --xr-mode off --path . -s res://tests/test_runner.gd
-```
+<details>
+<summary><strong>Inside the Web export: what the Godot preset produces</strong></summary>
 
-To compare combat particle CPU cost between revisions, run
-`godot --headless --xr-mode off --path . -s res://tests/bench_effects.gd`.
-It reports the median update time and submitted instances after a full pool expires down to 32 live sparks.
-This does not measure Quest GPU time or overall frame rate.
+The **`DungeonStomp`** preset (capital D and S) targets **Web**. It exports `index.html` with a JavaScript loader, WebAssembly engine, and PCK. It uses a single-threaded build, with extension support and progressive web app mode disabled. Host the exported files together over HTTPS; immersive WebXR needs a secure context and a user gesture to start.
 
-Lighting regression tests need a real GPU renderer (not `--headless`). They measure point-light falloff against the intended curve:
+**The preset alone does not reproduce the hosted VR experience.** The checked-in [XR rig](scripts/xr_rig.gd) initializes OpenXR, not a browser WebXR session, and the [raw-data packer](addons/data_export/plugin.gd) runs only for Android. A self-hosted immersive build also needs WebXR session startup and the classic game data packaged where [the loader](scripts/data_paths.gd) can read it.
 
-```bash
-godot --xr-mode off --path . --rendering-method mobile -s res://tests/test_lighting.gd
-godot --xr-mode off --path . --rendering-method gl_compatibility -s res://tests/test_lighting.gd
-```
+</details>
 
----
+## Windows desktop
 
-## 🎮 Controls
+For keyboard and mouse or a gamepad, open [project.godot](project.godot) in Godot **4.7.2** and press **F5**. Click the game window to capture the mouse. Move with **WASD**, look with the mouse, **left-click** to attack or cast, press **E** to interact, and cycle gear with **Q / Z**. On a gamepad, use the sticks to move and look, the right trigger to attack, and the bumpers to cycle gear.
 
-In Options, a light outline with an empty center means the setting is off. An amber box with a check mark means it is on. The focus outline surrounds the whole row and is separate from the check mark.
-
-Open **Options** during a run to toggle **God Mode** (invincibility) or **Fly Mode**. These match the gameplay shortcuts and reset when you start a new game. Choose **Exit Game** from the main or pause menu to close the game; quitting a started run saves it for **Resume**.
-
-### Keyboard & Mouse
-
-| Key / Input | Action |
-|-------------|--------|
-| `W` `A` `S` `D` / Arrow keys | Move / Strafe |
-| Mouse | Look around (click window to capture cursor) |
-| Left Mouse Button | Attack with weapon / cast active spell |
-| `Space` | Jump (or fly up in fly mode) |
-| `Shift` | Sprint |
-| `Q` / `Z` | Next / previous weapon or spell |
-| `E` | Open nearby door / interact with chest. Stone doors play a sliding sound from the doorway as they open. |
-| `G` | Generate a new procedural dungeon level |
-| `N` | Toggle normal mapping |
-| `P` / `M` | Toggle music on/off |
-| `H` | Toggle the player HUD (also in Options → Show Player HUD) |
-| `F` / `V` | Toggle fly mode (noclip exploration) |
-| `C` / `Ctrl` | Fly down (while in fly mode) |
-| `I` | Cheat: Toggle God Mode (invincibility) |
-| `K` | Cheat: Unlock all weapons & bonus spells |
-| `Esc` | Pause / open menu / release mouse cursor |
-
-### Gamepad / Controller
-
-| Controller Input | Action |
-|------------------|--------|
-| **Left Stick** | Move / Strafe |
-| **Right Stick** | Look around |
-| **Right Trigger (RT)** | Attack / cast spell |
-| **Left Trigger (LT)** / **L3** | Sprint |
-| **A Button** | Jump (or fly up in fly mode) |
-| **B Button** | Fly down (in fly mode) |
-| **X Button** | Interact / open door / open chest |
-| **Right Bumper (RB)** / **Y** / **D-Pad Right** | Next weapon or spell |
-| **Left Bumper (LB)** / **D-Pad Left** | Previous weapon or spell |
-| **R3 (Right Stick Click)** | Recenter camera pitch |
-| **Start** | Pause / toggle menu |
-| **Back / Select** | Cheat: Toggle God Mode |
-| **D-Pad Up** | Toggle music on/off |
-| **D-Pad Down** | Toggle normal mapping |
-
-### VR (OpenXR)
-
-When an OpenXR runtime with a connected headset is available (SteamVR, Meta Quest Link, Windows Mixed Reality via SteamVR, etc.), the game starts in VR automatically. Without one it falls back to the desktop mode above. Pass `-- --no-xr` to force desktop mode.
-
-In VR the player weapon (an MD2 model) is drawn in one fixed pose, held in your right hand. It never plays its MD2 animations; your controller moves it. Melee weapons hit by **physically swinging** them into monsters (one hit per monster per swing). Spells fire from where the right controller points.
-
-| VR Input | Action |
-|----------|--------|
-| **Swing right controller** | Melee attack (axes and swords) |
-| **Right Trigger** | Cast the selected spell / click menu buttons |
-| **Left Stick** | Move / Strafe (head-relative) |
-| **Left Stick Click** | Toggle sprint |
-| **Right Stick (left/right)** | Smooth turn |
-| **Right Stick (up/down)** | Fly up/down (in fly mode) |
-| **A** | Jump (or fly up in fly mode) |
-| **B** | Interact / open door / open chest (menu: back) |
-| **Y** / **Right Stick Click** | Next weapon or spell |
-| **X** | Previous weapon or spell |
-| **Left Trigger** / **Left Menu Button** | Pause / resume (open or close the menu) |
-
-Menus appear on a panel floating in front of you. The HUD is laid out like a VR dungeon crawler: the debug/info panel sits in the upper-left of your view, the minimap in the upper-right, and the stat bar low in front of you. They follow your body (recentring only when you turn well away) and never move when the menu opens. Their angles are `DEBUG_PANEL_ANGLES`, `MINIMAP_ANGLES` and `STAT_BAR_ANGLES` in `scripts/xr_rig.gd`; the stat bar's size is `HUD_SCALE` in `scripts/ui.gd` (the same setting controls the desktop HUD size). Set `SHOW_DEBUG_PANEL` in `scripts/ui.gd` to `false` to remove the debug/info panel. Weapon fit (`WEAPON_*`), swing sensitivity (`SWING_*`), turn speed, and panel placement (`UI_*`, `OVERLAY_*`) are constants at the top of `scripts/xr_rig.gd`. For development without a headset, `-- --xr-simulate` builds the VR rig with fixed head and hand poses in the desktop window.
-
----
-
-## 📁 Project Structure
+**To distribute a Windows build**, use the **`Windows Desktop`** preset with matching export templates. It produces an **x86-64** `DungeonStomp.exe` with an embedded Godot PCK. The classic data is still loaded from disk: copy these four directories next to the executable and distribute them together.
 
 ```text
-DungeonStompGodot/
-├── Assets/                 # MD2 meshes, 3DS models, textures, and normal maps (.gdignore)
-├── bin/                    # Classic level maps (.map), Objects.dat, modellist.dat, textures.dat
-├── Midi/                   # Classic MIDI background soundtracks (.gdignore)
-├── Sounds/                 # Sound effects and ambient audio loops (.gdignore)
-├── scenes/
-│   └── main.tscn           # Main game scene
-├── scripts/
-│   ├── audio.gd            # Sound and music manager
-│   ├── collision.gd        # 3D spatial collision grid and capsule physics
-│   ├── data_paths.gd       # Runtime asset directory locator
-│   ├── effects.gd          # Lighting, particles, and floating combat text
-│   ├── game.gd             # Main game loop, player, and world management
-│   ├── gamepad.gd          # Gamepad input and vibration support
-│   ├── generator.gd        # Seeded procedural dungeon generator
-│   ├── materials.gd        # Dynamic material creation and shaders
-│   ├── md2.gd              # Quake II MD2 loader with GPU vertex blending
-│   ├── minimap.gd          # 2D circular radar minimap
-│   ├── monster.gd          # Monster AI and combat state machine
-│   ├── parsers.gd          # Classic binary/text file format parsers
-│   ├── tds.gd              # 3D Studio (.3ds) mesh loader
-│   ├── ui.gd               # HUD, menus, and on-screen messages
-│   └── xr_rig.gd           # OpenXR VR rig, controller-held weapon, swing melee, VR UI panel
-├── tests/
-│   └── test_runner.gd      # Headless automated test suite
-├── tools/                  # Asset conversion and analysis utilities
-├── verification/           # Verification scripts and screenshot captures
-├── export_presets.cfg      # Godot Windows Desktop export configuration
-├── project.godot           # Godot engine project configuration
-├── DungeonStomp.exe        # Pre-built Windows desktop binary
-└── README.md
+DungeonStomp.exe
+Assets/
+bin/
+Sounds/
+Midi/
 ```
 
----
+With an active OpenXR runtime and headset, Windows can also start in VR. To force the flat-screen view, launch `DungeonStomp.exe -- --no-xr`.
 
-## 🔗 Related Projects & History
+## From DirectX 7 to a tracked sword
 
-- **Original Game:** *Dungeon Stomp*, the classic Direct3D dungeon crawler developed by [Mark Longo (moonwho101)](https://github.com/moonwho101).
-- **Web Version:** For the browser-based WebGL port, see the [DungeonStompThreejs](https://github.com/moonwho101/DungeonStompThreejs) repository or [play it live online](https://moonwho101.github.io/DungeonStompThreejs/).
+**[Mark Longo](https://github.com/moonwho101)** is the creator of Dungeon Stomp. **moonwho101** is his handle on GitHub and [itch.io](https://moonwho101.itch.io/). He began the [original Dungeon Stomp](https://github.com/moonwho101/DungeonStomp) in **2001**, writing it in C++ with Direct3D 7 for graphics, DirectInput for controls, and DirectSound for audio. The first public beta arrived in **August 2002**; the original source became available under the MIT license in **2021**.
 
----
+The [DirectX 12 edition](https://github.com/moonwho101/DungeonStompDirectX12) brought physically based materials to those stone corridors. [Dungeon Stomp Three.js](https://github.com/moonwho101/DungeonStompThreejs) took a different route: it brought the levels, models, textures, and sounds to the browser using JavaScript and WebGL.
 
-## 📜 License
+This Godot edition keeps that continuity in the files themselves. GDScript reads the [classic level data](scripts/parsers.gd), [Quake II–format MD2 characters and weapons](scripts/md2.gd), and [3D Studio props](scripts/tds.gd) at runtime. The sword you swing on Quest is still an MD2 model; what changed is that your hand now supplies the motion.
 
-Released under the [MIT License](LICENSE). © Mark Longo.
+[MIT license](LICENSE) · [Original model artists and credits](https://github.com/moonwho101/DungeonStomp#-model-credits) · [Godot export presets](export_presets.cfg)
