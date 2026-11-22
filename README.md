@@ -18,7 +18,7 @@
 [![Godot 4.7.2](https://img.shields.io/badge/Godot-4.7.2-478cbf?style=for-the-badge&logo=godotengine&logoColor=white)](https://godotengine.org)
 [![MIT License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
-![Dungeon Stomp key art: a skeleton warrior advancing down a torch-lit stone corridor](verification/screenshots/s6.png)
+![Dungeon Stomp key art: a skeleton warrior advancing down a torch-lit stone corridor](verification/screenshots/s12.png)
 
 **[Features](#%EF%B8%8F-why-youll-want-to-play-it)** · **[WebXR](#-webxr--play-in-the-browser)** · **[Quest 3](#-meta-quest-3--native-apk)** · **[Windows](#%EF%B8%8F-windows-desktop--pcvr)** · **[Project tour](#-project-tour)** · **[History](#-from-directx-7-to-a-tracked-sword)**
 
