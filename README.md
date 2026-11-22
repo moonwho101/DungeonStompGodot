@@ -11,6 +11,8 @@
 
 ### 🥽 [Now available on SideQuest for Meta Quest](https://sidequestvr.com/app/64231/dungeon-stomp)
 
+### 🧊 [Also play the Three.js version in your browser](https://moonwho101.github.io/DungeonStompThreejs/) · [source code](https://github.com/moonwho101/DungeonStompThreejs)
+
 [![Play WebXR](https://img.shields.io/badge/%E2%96%B6%20PLAY-WebXR%20in%20Browser-ff3b30?style=for-the-badge)](https://moonwho101.github.io/DungeonStompGodot/)
 [![SideQuest](https://img.shields.io/badge/SideQuest-Get%20it%20on%20Quest-ff6f00?style=for-the-badge&logo=meta&logoColor=white)](https://sidequestvr.com/app/64231/dungeon-stomp)
 [![Meta Quest 3](https://img.shields.io/badge/Meta%20Quest%203-Native%20APK-1c1e20?style=for-the-badge&logo=meta&logoColor=white)](#-meta-quest-3--native-apk)
