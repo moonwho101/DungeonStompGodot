@@ -2,16 +2,53 @@
 extends EditorPlugin
 
 var _exporter: DataExportPlugin
+var _quest_manifest: QuestManifestPlugin
 
 
 func _enter_tree() -> void:
 	_exporter = DataExportPlugin.new()
 	add_export_plugin(_exporter)
+	_quest_manifest = QuestManifestPlugin.new()
+	add_export_plugin(_quest_manifest)
 
 
 func _exit_tree() -> void:
 	remove_export_plugin(_exporter)
+	remove_export_plugin(_quest_manifest)
 	_exporter = null
+	_quest_manifest = null
+
+
+# Without com.oculus.supportedDevices, Horizon OS runs the APK in legacy compatibility mode, where
+# xrEnumerateDisplayRefreshRatesFB offers only 72 Hz and the runtime drops back to it right after startup.
+class QuestManifestPlugin extends EditorExportPlugin:
+	const SUPPORTED_DEVICES := "quest2|quest3|quest3s|questpro"
+
+	func _get_name() -> String:
+		return "DungeonStompQuestManifest"
+
+	func _supports_platform(platform: EditorExportPlatform) -> bool:
+		return platform is EditorExportPlatformAndroid
+
+	func _is_openxr() -> bool:
+		return get_option("xr_features/xr_mode") == 1
+
+	func _get_android_manifest_application_element_contents(_platform: EditorExportPlatform, _debug: bool) -> String:
+		if not _is_openxr():
+			return ""
+		return '\n        <meta-data android:name="com.oculus.supportedDevices" android:value="%s" />\n' % SUPPORTED_DEVICES
+
+	func _get_android_manifest_activity_element_contents(_platform: EditorExportPlatform, _debug: bool) -> String:
+		if not _is_openxr():
+			return ""
+		return """
+            <intent-filter>
+				<action android:name="android.intent.action.MAIN" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<category android:name="com.oculus.intent.category.VR" />
+				<category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
+            </intent-filter>
+"""
 
 
 # The data folders carry .gdignore (so the importer leaves the raw files alone), which also hides them
