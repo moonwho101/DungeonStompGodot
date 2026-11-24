@@ -57,6 +57,8 @@ class QuestManifestPlugin extends EditorExportPlugin:
 class DataExportPlugin extends EditorExportPlugin:
 	const FOLDERS := ["Assets", "bin", "Sounds", "Midi"]
 	const SKIP_EXTENSIONS := ["gdignore", "max", "import", "uid"]
+	# Source art for res://icons/ (see tools/generate_icons.py); the game never loads it.
+	const SKIP_FILES := ["res://Assets/icon.png"]
 	# The web build has no music (Midi is skipped) and only packs the file types the game reads, to keep
 	# the browser download small.
 	const WEB_FOLDERS := {
@@ -88,11 +90,11 @@ class DataExportPlugin extends EditorExportPlugin:
 		var count := 0
 		for f in DirAccess.get_files_at(dir_path):
 			var ext := f.get_extension().to_lower()
-			if f.begins_with(".") or SKIP_EXTENSIONS.has(ext):
+			var file_path := dir_path.path_join(f)
+			if f.begins_with(".") or SKIP_EXTENSIONS.has(ext) or SKIP_FILES.has(file_path):
 				continue
 			if not allowed.is_empty() and not allowed.has(ext):
 				continue
-			var file_path := dir_path.path_join(f)
 			add_file(file_path, FileAccess.get_file_as_bytes(file_path), false)
 			count += 1
 		for d in DirAccess.get_directories_at(dir_path):
