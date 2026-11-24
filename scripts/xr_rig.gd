@@ -31,7 +31,7 @@ const WEAPON_GRIP_FRACTION_OVERRIDES := {"weaponsorcerer": 0.4}
 const WEAPON_OFFSET := Vector3.ZERO # extra anchor offset in grip space (units)
 const WEAPON_ROT_DEG := Vector3.ZERO # extra anchor rotation in grip space (degrees)
 
-const REFRESH_RATE := 90.0 # Hz; used when the headset offers it (Quest 3: 72/80/90/120)
+const REFRESH_RATE := 72.0 # Hz; used when the headset offers it (Quest 3: 72/80/90/120)
 const RENDER_SCALE := 1.25 # multiplier on the runtime's recommended per-eye resolution (Quest 3 ~1.25 ≈ panel res)
 
 const UI_SIZE := Vector2i(1920, 1080)
