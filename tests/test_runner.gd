@@ -52,6 +52,19 @@ func _run_tests() -> void:
 	check(level.instances.size() == 1991, "level1.map instances (%d)" % level.instances.size())
 	check(level.start_pos == Vector3(5200, 128, 2600), "level1.map start position")
 
+	# bin/level99.map overrides the generator only while it exists.
+	var custom_path := DataPaths.path(Game.CUSTOM_MAP_PATH)
+	var had_custom := FileAccess.file_exists(custom_path)
+	if not had_custom:
+		check(Game.custom_map_text() == "", "no custom map without bin/level99.map")
+		var f := FileAccess.open(custom_path, FileAccess.WRITE)
+		f.store_string("OBJECT startpos 1 2 3 0 0\n")
+		f.close()
+		check(Game.custom_map_text() == "OBJECT startpos 1 2 3 0 0\n", "bin/level99.map text is used when present")
+		DirAccess.remove_absolute(custom_path)
+	else:
+		check(Game.custom_map_text() == FileAccess.get_file_as_string(custom_path), "bin/level99.map text is used when present")
+
 	var a := DungeonGenerator.generate({"numObjectsToPlace": 150, "seed": "test-seed"})
 	var b := DungeonGenerator.generate({"numObjectsToPlace": 150, "seed": "test-seed"})
 	check(a != "" and a == b, "seeded generator is deterministic")

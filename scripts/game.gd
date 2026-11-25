@@ -67,6 +67,8 @@ const SAVE_KEY := "dungeonRunState"
 const GEN_OPTS_KEY := "dungeonGenerationOptions"
 const GAME_OPTS_KEY := "dungeonGameOptions"
 const MAP_KEY := "generatedLevel1Map"
+# When present, this hand-made map replaces the procedural generator for new games and new levels.
+const CUSTOM_MAP_PATH := "bin/level99.map"
 
 # Subsystems
 var collision := CollisionWorld.new()
@@ -829,8 +831,9 @@ func _build_game_world(override_map_text: String) -> void:
 
 	var map_text := override_map_text
 	if map_text == "":
-		# A saved run resumes on the dungeon it was saved in; the bundled bin/level1.map is used when
-		# there is no saved run (or the run was played on it); a run whose map is missing gets a new dungeon.
+		# A saved run resumes on the dungeon it was saved in; with no saved run, bin/level99.map is used when
+		# present, otherwise the bundled bin/level1.map (also used when the run was played on it); a run whose
+		# map is missing gets a new dungeon.
 		var saved_run = storage_get(SAVE_KEY)
 		var saved_map = storage_get(MAP_KEY)
 		if saved_run is Dictionary and saved_run.get("mapSource") == "bundled":
@@ -838,8 +841,10 @@ func _build_game_world(override_map_text: String) -> void:
 		elif saved_map is String and saved_map != "":
 			map_text = saved_map
 		elif saved_run is Dictionary:
-			map_text = DungeonGenerator.generate(gen_options)
+			map_text = _new_level_map_text(gen_options)
 			storage_set(MAP_KEY, map_text)
+		else:
+			map_text = custom_map_text()
 
 	current_map_text = map_text
 	current_map_key = hash_string(map_text) if map_text != "" else "bundled"
@@ -1239,10 +1244,10 @@ func generate_and_load_new_level(descend: bool = false, override_options: Dictio
 	level_load_in_flight = true
 	if descend:
 		set_dungeon_depth(dungeon_depth + 1)
-	print("Generating new dungeon level...")
 	var opts := gen_options.duplicate()
 	opts.merge(override_options, true)
-	var map_text := DungeonGenerator.generate(opts)
+	# Explicit generation requests (the menu's Generate Dungeon) always use the generator.
+	var map_text := _new_level_map_text(opts) if override_options.is_empty() else DungeonGenerator.generate(opts)
 	storage_set(MAP_KEY, map_text)
 	load_game_world(map_text)
 	update_weapon_mesh()
@@ -1258,6 +1263,22 @@ func generate_and_load_new_level(descend: bool = false, override_options: Dictio
 	level_load_in_flight = false
 	# Saved after the in-flight flag clears, so the new level (and portal depth) is what gets persisted.
 	save_current_run()
+
+
+# Text of bin/level99.map, or "" when the file is absent.
+static func custom_map_text() -> String:
+	if not FileAccess.file_exists(DataPaths.path(CUSTOM_MAP_PATH)):
+		return ""
+	return DataPaths.read_text(CUSTOM_MAP_PATH)
+
+
+func _new_level_map_text(opts: Dictionary) -> String:
+	var custom := custom_map_text()
+	if custom != "":
+		print("Loading custom dungeon from %s..." % CUSTOM_MAP_PATH)
+		return custom
+	print("Generating new dungeon level...")
+	return DungeonGenerator.generate(opts)
 
 # ---------------------------------------------------------------- Input
 
