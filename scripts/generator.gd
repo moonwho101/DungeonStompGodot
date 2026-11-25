@@ -8,7 +8,12 @@ const DIR_S := [0, -1]
 const DIR_W := [-1, 0]
 const DIR_E := [1, 0]
 
-const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06"]
+const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09"]
+
+# Rooms only placed 20% of the time when picked.
+const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09"]
+# Big rooms: attach only to corridors, crossings never attach to them, 4-8 torches and 4-6 items.
+const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08", "ROOM09"]
 
 const OBJECTS := {
 	"CORRIDOR01": [
@@ -47,6 +52,23 @@ const OBJECTS := {
 	"ROOM06": [
 		{"pos": [0, -311], "out": DIR_S, "y": 0},
 	],
+	# Built from ROOM05 by tools/room_builder.py (smaller, arch mirrored onto the west wall).
+	"ROOM07": [
+		{"pos": [355, -267], "out": DIR_E, "y": 0},
+		{"pos": [-355, -267], "out": DIR_W, "y": 0},
+	],
+	# Octagonal rotunda with an arch on every side, built by tools/room_rotunda.py.
+	"ROOM08": [
+		{"pos": [520, 0], "out": DIR_E, "y": 0},
+		{"pos": [0, 520], "out": DIR_N, "y": 0},
+		{"pos": [-520, 0], "out": DIR_W, "y": 0},
+		{"pos": [0, -520], "out": DIR_S, "y": 0},
+	],
+	# Crescent gallery curving between a south and a west arch, built by tools/room_serpent.py.
+	"ROOM09": [
+		{"pos": [158, -375], "out": DIR_S, "y": 0},
+		{"pos": [-375, 158], "out": DIR_W, "y": 0},
+	],
 }
 
 const BOUNDING_BOXES_FULL := {
@@ -59,6 +81,9 @@ const BOUNDING_BOXES_FULL := {
 	"ROOM02": [-255, -173, 249, 165],
 	"ROOM06": [-297, -338, 294, 339],
 	"ROOM05": [-505, -803, 517, 839],
+	"ROOM07": [-417, -620, 417, 621],
+	"ROOM08": [-583, -583, 583, 583],
+	"ROOM09": [-438, -438, 438, 438],
 }
 
 const FLOOR_SLOTS := {
@@ -71,6 +96,42 @@ const FLOOR_SLOTS := {
 	"ROOM02": [[0.0, 0.0], [-120.0, -60.0], [120.0, -60.0], [-120.0, 60.0], [120.0, 60.0]],
 	"ROOM06": [[0.0, 0.0], [-140.0, -120.0], [140.0, -120.0], [-140.0, 120.0], [140.0, 120.0], [0.0, -200.0], [0.0, 200.0]],
 	"ROOM05": [[0.0, 0.0], [-150.0, -200.0], [150.0, -200.0], [-150.0, 200.0], [150.0, 200.0], [0.0, -300.0], [0.0, 300.0]],
+	"ROOM07": [[0.0, 0.0], [-150.0, -200.0], [150.0, -200.0], [-150.0, 200.0], [150.0, 200.0], [0.0, -350.0], [0.0, 400.0]],
+	"ROOM08": [[0.0, 0.0], [127.0, 127.0], [200.0, 0.0], [300.0, 300.0], [-127.0, 127.0], [0.0, 200.0], [-300.0, 300.0],
+		[-127.0, -127.0], [-200.0, 0.0], [-300.0, -300.0], [127.0, -127.0], [0.0, -200.0], [300.0, -300.0]],
+	"ROOM09": [[0.0, 0.0], [140.0, -235.0], [87.0, -107.0], [-107.0, 87.0], [-235.0, 140.0],
+		[-21.0, -227.0], [256.0, -112.0], [-227.0, -21.0], [-112.0, 256.0]],
+}
+
+# Wall torch spots per piece: [local x, local z, facing rotation].
+const TORCH_POSITIONS := {
+	"CORRIDOR01": [[-200, -155, 270], [0, -155, 270], [200, -155, 270],
+		[-200, 155, 90], [0, 155, 90], [200, 155, 90]],
+	"ROOM05": [
+		[-334 - 25, -431, 180], [-334 - 25, -231, 180], [-334 - 25, -31, 180],
+		[-334 - 25, 169, 180], [-334 - 25, 369, 180],
+		[415, -631, 0], [415, -231, 0], [415, -31, 0], [415, 169, 0], [415, 369, 0],
+		[-174, -791 + 180, 270], [26, -791 + 180, 270], [226, -791 + 180, 270], [426, -791 + 180, 270],
+		[-174, 655 + 40, 90], [26, 655 + 40, 90], [226, 655 + 40, 90], [426, 655 + 40, 90]],
+	"ROOM06": [[-254 + 125, -311 + 200, 180], [-254 + 60, -311 + 390, 270],
+		[251 - 125, -311 + 200, 0], [251 - 60, -311 + 390, 270],
+		[-254 + 200, 296 - 20, 90], [-254 + 400, 296 - 20, 90]],
+	# Side walls at x = ±370 (arches span z -488..1), end walls near z -529 / 596.
+	"ROOM07": [
+		[-315, -49, 180], [-315, 151, 180], [-315, 351, 180],
+		[315, -49, 0], [315, 151, 0], [315, 351, 0],
+		[-326, -429, 270], [-126, -429, 270], [126, -429, 270], [326, -429, 270],
+		[-326, 477, 90], [-126, 477, 90], [126, 477, 90], [326, 477, 90]],
+	# Beside each diagonal shrine niche, then on the inner face of each pillar.
+	"ROOM08": [
+		[446, 297, 45], [297, 446, 45], [-297, 446, 135], [-446, 297, 135],
+		[-446, -297, 225], [-297, -446, 225], [297, -446, 315], [446, -297, 315],
+		[239, 99, 22], [99, 239, 68], [-99, 239, 112], [-239, 99, 158],
+		[-239, -99, 202], [-99, -239, 248], [99, -239, 292], [239, -99, 338]],
+	# Outer wall beside each rib, then the inner wall in the middle of each bay.
+	"ROOM09": [
+		[367, -174, 15], [291, 10, 30], [169, 169, 45], [11, 291, 60], [-174, 367, 75],
+		[-80, -333, 188], [-99, -259, 202], [-138, -192, 218], [-192, -138, 232], [-259, -99, 248], [-333, -80, 262]],
 }
 
 const MIN_SPIRAL_START_DISTANCE := 500.0
@@ -234,7 +295,7 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 	}
 	placed.append(start_piece)
 
-	entities.append({"type": "circle", "x": start_x, "y": -41.0 + 40.0, "z": start_z, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
+	entities.append({"type": "circle", "x": start_x, "y": -41.0 + 32.0, "z": start_z, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
 	entity_id_idx += 1
 
 	var open_exits: Array = []
@@ -266,14 +327,14 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 		rng.shuffle(types)
 
 		for cand_name: String in types:
-			if cand_name == "ROOM05" or cand_name == "ROOM06" or cand_name == "ROOM02":
+			if cand_name in RARE_ROOMS:
 				if rng.next() > 0.20:
 					continue
-			if cand_name == "ROOM05":
+			if cand_name in LARGE_ROOMS:
 				if not source_name.begins_with("CORRIDOR"):
 					continue
 			if cand_name.begins_with("CROSSING"):
-				if source_name == "ROOM05":
+				if source_name in LARGE_ROOMS:
 					continue
 				if not source_name.begins_with("CORRIDOR"):
 					continue
@@ -324,24 +385,11 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 											"rot": door_rot, "id": entity_id_idx, "state": -1})
 										entity_id_idx += 1
 
-							if cand_name == "ROOM05" or cand_name == "CORRIDOR01" or cand_name == "ROOM06":
+							if TORCH_POSITIONS.has(cand_name):
 								var num_torches := rng.randint(2, 4)
-								var all_torch_positions: Array = []
-								if cand_name == "CORRIDOR01":
-									all_torch_positions = [[-200, -155, 270], [0, -155, 270], [200, -155, 270],
-										[-200, 155, 90], [0, 155, 90], [200, 155, 90]]
-								elif cand_name == "ROOM05":
+								if cand_name in LARGE_ROOMS:
 									num_torches = rng.randint(4, 8)
-									all_torch_positions = [
-										[-334 - 25, -431, 180], [-334 - 25, -231, 180], [-334 - 25, -31, 180],
-										[-334 - 25, 169, 180], [-334 - 25, 369, 180],
-										[415, -631, 0], [415, -231, 0], [415, -31, 0], [415, 169, 0], [415, 369, 0],
-										[-174, -791 + 180, 270], [26, -791 + 180, 270], [226, -791 + 180, 270], [426, -791 + 180, 270],
-										[-174, 655 + 40, 90], [26, 655 + 40, 90], [226, 655 + 40, 90], [426, 655 + 40, 90]]
-								elif cand_name == "ROOM06":
-									all_torch_positions = [[-254 + 125, -311 + 200, 180], [-254 + 60, -311 + 390, 270],
-										[251 - 125, -311 + 200, 0], [251 - 60, -311 + 390, 270],
-										[-254 + 200, 296 - 20, 90], [-254 + 400, 296 - 20, 90]]
+								var all_torch_positions: Array = TORCH_POSITIONS[cand_name]
 
 								var torch_positions: Array = rng.sample(all_torch_positions, num_torches) if num_torches > 0 else []
 								var base_colors := [[1.0, 1.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
@@ -402,7 +450,7 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 								var d_rot: int = rng.choice([0, 45, 90, 135, 180, 225, 270, 315])
 
 								var num_items := 0
-								if cand_name.begins_with("ROOM05"):
+								if cand_name in LARGE_ROOMS:
 									num_items = rng.randint(4, 6)
 								elif cand_name.begins_with("CROSSING"):
 									num_items = rng.randint(2, 3)
@@ -561,7 +609,7 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 						e.x = new_wx
 						e.z = new_wz
 
-		entities.append({"type": "circle", "x": tx, "y": ty - 41.0 + 40.0, "z": tz, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
+		entities.append({"type": "circle", "x": tx, "y": ty - 41.0 + 32.0, "z": tz, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
 		entity_id_idx += 1
 		entities.append({"type": "spiral", "x": tx, "y": ty + 40.0, "z": tz, "rot": 0, "name": "-1", "id": entity_id_idx, "state": 2})
 		entity_id_idx += 1
