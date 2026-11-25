@@ -8,12 +8,12 @@ const DIR_S := [0, -1]
 const DIR_W := [-1, 0]
 const DIR_E := [1, 0]
 
-const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08"]
+const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09"]
 
 # Rooms only placed 20% of the time when picked.
-const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08"]
+const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09"]
 # Big rooms: attach only to corridors, crossings never attach to them, 4-8 torches and 4-6 items.
-const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08"]
+const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08", "ROOM09"]
 
 const OBJECTS := {
 	"CORRIDOR01": [
@@ -64,6 +64,11 @@ const OBJECTS := {
 		{"pos": [-520, 0], "out": DIR_W, "y": 0},
 		{"pos": [0, -520], "out": DIR_S, "y": 0},
 	],
+	# Crescent gallery curving between a south and a west arch, built by tools/room_serpent.py.
+	"ROOM09": [
+		{"pos": [158, -375], "out": DIR_S, "y": 0},
+		{"pos": [-375, 158], "out": DIR_W, "y": 0},
+	],
 }
 
 const BOUNDING_BOXES_FULL := {
@@ -78,6 +83,7 @@ const BOUNDING_BOXES_FULL := {
 	"ROOM05": [-505, -803, 517, 839],
 	"ROOM07": [-417, -620, 417, 621],
 	"ROOM08": [-583, -583, 583, 583],
+	"ROOM09": [-438, -438, 438, 438],
 }
 
 const FLOOR_SLOTS := {
@@ -93,6 +99,8 @@ const FLOOR_SLOTS := {
 	"ROOM07": [[0.0, 0.0], [-150.0, -200.0], [150.0, -200.0], [-150.0, 200.0], [150.0, 200.0], [0.0, -350.0], [0.0, 400.0]],
 	"ROOM08": [[0.0, 0.0], [127.0, 127.0], [200.0, 0.0], [300.0, 300.0], [-127.0, 127.0], [0.0, 200.0], [-300.0, 300.0],
 		[-127.0, -127.0], [-200.0, 0.0], [-300.0, -300.0], [127.0, -127.0], [0.0, -200.0], [300.0, -300.0]],
+	"ROOM09": [[0.0, 0.0], [140.0, -235.0], [87.0, -107.0], [-107.0, 87.0], [-235.0, 140.0],
+		[-21.0, -227.0], [256.0, -112.0], [-227.0, -21.0], [-112.0, 256.0]],
 }
 
 # Wall torch spots per piece: [local x, local z, facing rotation].
@@ -120,6 +128,10 @@ const TORCH_POSITIONS := {
 		[-446, -297, 225], [-297, -446, 225], [297, -446, 315], [446, -297, 315],
 		[239, 99, 22], [99, 239, 68], [-99, 239, 112], [-239, 99, 158],
 		[-239, -99, 202], [-99, -239, 248], [99, -239, 292], [239, -99, 338]],
+	# Outer wall beside each rib, then the inner wall in the middle of each bay.
+	"ROOM09": [
+		[367, -174, 15], [291, 10, 30], [169, 169, 45], [11, 291, 60], [-174, 367, 75],
+		[-80, -333, 188], [-99, -259, 202], [-138, -192, 218], [-192, -138, 232], [-259, -99, 248], [-333, -80, 262]],
 }
 
 const MIN_SPIRAL_START_DISTANCE := 500.0
