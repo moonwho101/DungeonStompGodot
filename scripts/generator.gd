@@ -369,7 +369,7 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 							placed.append(new_piece)
 							placed_new = true
 
-							if cand_name.begins_with("CROSSING"):
+							if cand_name.begins_with("CROSSING") or cand_name in ["ROOM05", "ROOM07", "ROOM08", "ROOM09"]:
 								for c_ext: Dictionary in cand_exits:
 									if rng.next() < 0.40:
 										var out_dir: Array = c_ext.out

@@ -436,7 +436,7 @@ def _generate_attempt(start_x, start_z, num_objects_to_place, strict=True):
                             placed_new = True
                             print(f"Placed {cand_name} at ({Ox:.1f}, {Oy:.1f}, {Oz:.1f}) [Rot: {ang}]")
 
-                            if cand_name in ('CROSSING01', 'CROSSING02', 'CROSSING03'):
+                            if cand_name.startswith('CROSSING') or cand_name in ('ROOM05', 'ROOM07', 'ROOM08', 'ROOM09'):
                                 for c_ext in cand_exits:
                                     if random.random() < 0.40:
                                         lx, lz = c_ext['pos']
