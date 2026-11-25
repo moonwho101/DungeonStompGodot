@@ -45,9 +45,19 @@ OBJECTS = {
     ],
     'ROOM06': [#(-254, -311, 251, 296)
         {'pos': (0, -311), 'out': DIR_S, 'y': 0}
+    ],
+    # Built from ROOM05 by tools/room_builder.py (smaller, arch mirrored onto the west wall).
+    'ROOM07': [#(-417, -620, 417, 621)
+        {'pos': (355, -267), 'out': DIR_E, 'y': 0},
+        {'pos': (-355, -267), 'out': DIR_W, 'y': 0}
     ]
 
 }
+
+# Rooms only placed 20% of the time when picked.
+RARE_ROOMS = ('ROOM02', 'ROOM05', 'ROOM06', 'ROOM07')
+# Big rooms: attach only to corridors, crossings never attach to them, 4-8 torches and 4-6 items.
+LARGE_ROOMS = ('ROOM05', 'ROOM07')
 
 
 BOUNDING_BOXES_FULL = {
@@ -59,7 +69,8 @@ BOUNDING_BOXES_FULL = {
     'CROSSING03':   (-492, -422, 485, 420),
     'ROOM02':       (-255, -173, 249, 165),
     'ROOM06':       (-297, -338, 294, 339),
-    'ROOM05':       (-505, -803, 517, 839)
+    'ROOM05':       (-505, -803, 517, 839),
+    'ROOM07':       (-417, -620, 417, 621)
 }
 
 
@@ -124,6 +135,47 @@ FLOOR_SLOTS = {
         (150.0, 200.0),
         (0.0, -300.0),
         (0.0, 300.0)
+    ],
+    'ROOM07': [
+        (0.0, 0.0),          # center
+        (-150.0, -200.0),
+        (150.0, -200.0),
+        (-150.0, 200.0),
+        (150.0, 200.0),
+        (0.0, -350.0),
+        (0.0, 400.0)
+    ]
+}
+
+# Wall torch spots per piece: (local x, local z, facing rotation).
+TORCH_POSITIONS = {
+    # CORRIDOR01 has walls at local Z = ±200
+    'CORRIDOR01': [
+        (-200, -155, 270), (0, -155, 270), (200, -155, 270),
+        (-200, 155, 90), (0, 155, 90), (200, 155, 90)
+    ],
+    'ROOM05': [
+        # --- WEST WALL ---
+        (-334 - 25, -431, 180), (-334 - 25, -231, 180), (-334 - 25, -31, 180),
+        (-334 - 25, 169, 180), (-334 - 25, 369, 180),
+        # --- EAST WALL ---
+        (415, -631, 0), (415, -231, 0), (415, -31, 0), (415, 169, 0), (415, 369, 0),
+        # --- SOUTH WALL ---
+        (-174, -791 + 180, 270), (26, -791 + 180, 270), (226, -791 + 180, 270), (426, -791 + 180, 270),
+        # --- NORTH WALL ---
+        (-174, 655 + 40, 90), (26, 655 + 40, 90), (226, 655 + 40, 90), (426, 655 + 40, 90)
+    ],
+    'ROOM06': [
+        (-254 + 125, -311 + 200, 180), (-254 + 60, -311 + 390, 270),
+        (251 - 125, -311 + 200, 0), (251 - 60, -311 + 390, 270),
+        (-254 + 200, 296 - 20, 90), (-254 + 400, 296 - 20, 90)
+    ],
+    # Side walls at x = ±370 (arches span z -488..1), end walls near z -529 / 596.
+    'ROOM07': [
+        (-315, -49, 180), (-315, 151, 180), (-315, 351, 180),
+        (315, -49, 0), (315, 151, 0), (315, 351, 0),
+        (-326, -429, 270), (-126, -429, 270), (126, -429, 270), (326, -429, 270),
+        (-326, 477, 90), (-126, 477, 90), (126, 477, 90), (326, 477, 90)
     ]
 }
 
@@ -290,19 +342,19 @@ def _generate_attempt(start_x, start_z, num_objects_to_place, strict=True):
         random.shuffle(types)
 
         for cand_name in types:
-             # --- NEW: ROOM05 and ROOM06 only allowed 30% of the time ---
-            if cand_name in ("ROOM05", "ROOM06", "ROOM02"):
+            # --- Rare rooms only allowed 20% of the time ---
+            if cand_name in RARE_ROOMS:
                 if random.random() > 0.20:
                     continue
 
-            # --- ROOM05 must attach only to corridors ---
-            if cand_name == "ROOM05":
+            # --- Large rooms must attach only to corridors ---
+            if cand_name in LARGE_ROOMS:
                 if not source_name.startswith("CORRIDOR"):
                     continue
 
-            # --- Crossings cannot attach to ROOM05 ---
+            # --- Crossings cannot attach to large rooms ---
             if cand_name in ("CROSSING01", "CROSSING02", "CROSSING03"):
-                if source_name == "ROOM05":
+                if source_name in LARGE_ROOMS:
                     continue
 
             # --- Crossings can ONLY attach to corridors ---
@@ -382,68 +434,11 @@ def _generate_attempt(start_x, start_z, num_objects_to_place, strict=True):
                                         entity_id_idx += 1
                                         print(f"  -> Added door55 to {cand_name} opening at ({door_wx:.1f}, {door_wy:.1f}, {door_wz:.1f}) [Rot: {door_rot}]")
 
-                            if cand_name in ('ROOM05','CORRIDOR01','ROOM06'):
-                                # --- Add wall torches for CORRIDOR01 ---
+                            if cand_name in TORCH_POSITIONS:
                                 num_torches = random.randint(2, 4)
-                                if cand_name == 'CORRIDOR01':
-                                    # CORRIDOR01 has walls at local Z = ±200
-                                    # Place torches 20 units away from walls at intervals
-                                    all_torch_positions = [
-                                        (-200, -155,270),  # Left wall, back
-                                        (0, -155,270),     # Left wall, center
-                                        (200, -155,270),   # Left wall, front
-                                        (-200, 155,90),   # Right wall, back
-                                        (0, 155,90),      # Right wall, center
-                                        (200, 155,90)     # Right wall, front
-                                    ]
-                                elif cand_name == 'ROOM05':
-                                    # ROOM05 has walls at local X = ±200
+                                if cand_name in LARGE_ROOMS:
                                     num_torches = random.randint(4, 8)
-                                    all_torch_positions =[
-                                        # --- WEST WALL  ---
-
-                                        (-334 - 25, -431, 180),
-                                        (-334 - 25, -231, 180),
-                                        (-334 - 25, -31,  180),
-                                        (-334 - 25, 169,  180),
-                                        (-334 - 25, 369,  180),
-
-                                        # --- EAST WALL  ---
-                                        (415, -631, 0),#
-
-                                        (415, -231, 0),#
-                                        (415, -31,  0),
-                                        (415, 169,  0),
-                                        (415, 369,  0),
-
-                                        # --- SOUTH WALL  ---
-                                        (-174, -791 +180, 270),
-                                        (26,   -791 +180, 270),
-                                        (226,  -791 +180, 270),
-                                        (426,  -791 +180, 270),
-
-                                        # --- NORTH WALL  ---
-                                        (-174, 655 + 40, 90),
-                                        (26,   655 + 40, 90),
-                                        (226,  655 + 40, 90),
-                                        (426,  655 + 40, 90)
-                                    ]
-
-                                elif cand_name == 'ROOM06':
-                                    all_torch_positions = [
-                                        # --- WEST WALL (faces EAST → rot 90) ---
-                                        (-254 + 125, -311 + 200, 180),#1T--X
-                                        (-254 + 60, -311 + 390, 270),#2
-
-                                        # --- EAST WALL (faces WEST → rot 270) ---
-                                        (251 - 125, -311 + 200, 0),#1B--X
-                                        (251 - 60, -311 + 390, 270),#2
-
-                                        # --- NORTH WALL (faces SOUTH → rot 180) ---
-                                        (-254 + 200, 296 - 20, 90),#3back wall
-                                        (-254 + 400, 296 - 20, 90)#3
-                                    ]
-
+                                all_torch_positions = TORCH_POSITIONS[cand_name]
 
                                 # Randomly select 0-3 torches
                                 
@@ -576,7 +571,7 @@ def _generate_attempt(start_x, start_z, num_objects_to_place, strict=True):
                                 d_rot = random.choice([0, 45, 90, 135, 180, 225, 270, 315])
 
                                 # Determine how many items to spawn
-                                if cand_name.startswith("ROOM05"):
+                                if cand_name in LARGE_ROOMS:
                                     num_items = random.randint(4, 6)
                                 elif cand_name.startswith("CROSSING"):
                                     num_items = random.randint(2, 3)
