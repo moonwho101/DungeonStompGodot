@@ -295,7 +295,7 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 	}
 	placed.append(start_piece)
 
-	entities.append({"type": "circle", "x": start_x, "y": -41.0 + 40.0, "z": start_z, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
+	entities.append({"type": "circle", "x": start_x, "y": -41.0 + 32.0, "z": start_z, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
 	entity_id_idx += 1
 
 	var open_exits: Array = []
@@ -609,7 +609,7 @@ static func _generate_attempt(start_x: float, start_z: float, num_objects: int, 
 						e.x = new_wx
 						e.z = new_wz
 
-		entities.append({"type": "circle", "x": tx, "y": ty - 41.0 + 40.0, "z": tz, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
+		entities.append({"type": "circle", "x": tx, "y": ty - 41.0 + 32.0, "z": tz, "rot": 0, "name": "0", "id": entity_id_idx, "state": 2})
 		entity_id_idx += 1
 		entities.append({"type": "spiral", "x": tx, "y": ty + 40.0, "z": tz, "rot": 0, "name": "-1", "id": entity_id_idx, "state": 2})
 		entity_id_idx += 1

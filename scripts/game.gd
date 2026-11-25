@@ -885,7 +885,7 @@ func _build_game_world(override_map_text: String) -> void:
 		if inst.model_name != "":
 			var clean_model := inst.model_name.to_lower().strip_edges()
 			if clean_model == "spiral":
-				create_exit_teleporter(Vector3(inst.x, inst.y + 40.0, inst.z))
+				create_exit_teleporter(Vector3(inst.x, inst.y + 10.0, inst.z))
 				continue
 			var def := model_list.get_model_by_name(inst.model_name)
 			if def != null:

@@ -302,7 +302,7 @@ def _generate_attempt(start_x, start_z, num_objects_to_place, strict=True):
     # Place start circle (without spiral/teleport) at startpos center
     entities.append({
         'type': 'circle',
-        'x': start_x, 'y': -41.0 + 40.0, 'z': start_z,
+        'x': start_x, 'y': -41.0 + 32.0, 'z': start_z,
         'rot': 0, 'name': '0', 'id': entity_id_idx, 'state': 2
     })
     entity_id_idx += 1
@@ -842,7 +842,7 @@ def _generate_attempt(start_x, start_z, num_objects_to_place, strict=True):
         # Teleport base circle (slightly below ground)
         entities.append({
             'type': 'circle',
-            'x': tx, 'y': ty - 41.0 + 40.0,  'z': tz,
+            'x': tx, 'y': ty - 41.0 + 32.0,  'z': tz,
             'rot': 0,
             'name': '0',
             'id': entity_id_idx,
