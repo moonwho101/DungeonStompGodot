@@ -21,21 +21,20 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import room_builder as rb  # noqa: E402
-from room_rotunda import (ARCH_EXIT, ARCH_SOURCE, ARCH_TEXTURES, DOOR_OPENING, FY, Kit,  # noqa: E402
-                          ear_clip, rot_xz)
+from room_rotunda import DOOR_OPENING, FY, Kit, arch_triangles, ear_clip, rot_xz  # noqa: E402
 
 NAME = 'ROOM09'
 
 CX = CZ = -372.0          # centre of the ring; puts the room's bounding box around the origin
 R_IN, R_OUT = 250.0, 810.0
 R_MID = (R_IN + R_OUT) / 2  # corridors join on the middle of the hall
-SEGMENTS = 24             # 3.75 degrees each
-WALL_TOP, VAULT_RISE, VAULT_STEPS = 300.0, 170.0, 12
+SEGMENTS = 12             # 7.5 degrees each
+WALL_TOP, VAULT_RISE, VAULT_STEPS = 300.0, 170.0, 6
 INNER_PLINTH, OUTER_PLINTH = 100.0, 120.0
 EXIT_GAP = 3.0            # end walls sit 3 units inside the exits so they can't z-fight corridor end caps
-BAY = 4                   # segments between ribs
+BAY = 2                   # segments between ribs
 RIB_DEPTH, RIB_HALF = 10.0, 10.0
-SPINE_HALF, SPINE_WAVE, SPINE_WAVES = 18.0, 90.0, 2
+SPINE_HALF, SPINE_WAVE, SPINE_WAVES, SPINE_STEPS = 18.0, 90.0, 2, 32
 DECAL_Y = FY + 1.0
 SPIRALS = ('corridor06', 'corridor07')
 
@@ -74,13 +73,24 @@ def wall_band(kit, r, y0, y1, tex_uv):
                  pt(r, y1, a1) + (u1, v0), pt(r, y1, a0) + (u0, v0))
 
 
-def outer_wall_tex(i):
-    """Spiral relief over the middle two segments of every bay, totem relief elsewhere."""
-    bay, k = divmod(i, BAY)
-    if k in (1, 2):
-        return SPIRALS[bay % 2], ((k - 1) / 2.0, k / 2.0), (0.0, 1.0)
-    seg = R_OUT * math.pi / 2 / SEGMENTS
-    return 'corridor03', (i * seg / 360.0, (i + 1) * seg / 360.0), (0.0, 1.0)
+def outer_wall(kit):
+    """Each bay is four columns: totem relief, spiral relief over the middle two, totem relief.
+
+    Columns are laid along the straight segment chords, so the wall stays flush with the vault."""
+    col = R_OUT * math.pi / 2 / SEGMENTS / 2
+    for i in range(SEGMENTS):
+        p0, p1 = pt(R_OUT, 0.0, seg_angle(i)), pt(R_OUT, 0.0, seg_angle(i + 1))
+        for c in range(2):
+            q = (i % BAY) * 2 + c                     # column within the bay, 0..3
+            j = i * 2 + c                             # column along the whole wall
+            if q in (1, 2):
+                tex, u0, u1 = SPIRALS[(i // BAY) % 2], (q - 1) / 2.0, q / 2.0
+            else:
+                tex, u0, u1 = 'corridor03', j * col / 360.0, (j + 1) * col / 360.0
+            a = [p0[k] + (p1[k] - p0[k]) * c / 2.0 for k in (0, 2)]
+            b = [p0[k] + (p1[k] - p0[k]) * (c + 1) / 2.0 for k in (0, 2)]
+            kit.quad(tex, (a[0], OUTER_PLINTH, a[1], u0, 1.0), (b[0], OUTER_PLINTH, b[1], u1, 1.0),
+                     (b[0], WALL_TOP, b[1], u1, 0.0), (a[0], WALL_TOP, a[1], u0, 0.0))
 
 
 def build_walls(kit):
@@ -89,7 +99,7 @@ def build_walls(kit):
     wall_band(kit, R_IN, INNER_PLINTH, WALL_TOP,
               lambda i: ('corridor09', (i * seg_in / 120, (i + 1) * seg_in / 120), (0, (WALL_TOP - INNER_PLINTH) / 120)))
     wall_band(kit, R_OUT, FY, OUTER_PLINTH, lambda i: ('entrance_uni2', (i * seg_out / 90, (i + 1) * seg_out / 90), (0, 1)))
-    wall_band(kit, R_OUT, OUTER_PLINTH, WALL_TOP, outer_wall_tex)
+    outer_wall(kit)
 
     v = vault()
     length = [0.0]
@@ -128,7 +138,7 @@ def build_floor(kit):
         quad = [pt(R_IN, FY, a0), pt(R_OUT, FY, a0), pt(R_OUT, FY, a1), pt(R_IN, FY, a1)]
         kit.quad('corridor01', *[p + (p[0] / 256.0, p[2] / 256.0) for p in quad])
 
-    steps = SEGMENTS * 4
+    steps = SPINE_STEPS
     prev = None
     for k in range(steps + 1):
         th = math.pi / 2 * k / steps
@@ -160,15 +170,13 @@ def exits():
 
 
 def build_doorways(kit):
-    lines, _ = rb.read_lines(rb.OBJECTS_DAT)
-    start, end, _ = rb.find_object(lines, ARCH_SOURCE)
-    arch = [(tex, verts) for tex, verts in rb.parse_triangles(lines[start + 1:end]) if tex in ARCH_TEXTURES]
+    arch = arch_triangles()
     lat0, lat1 = DOOR_OPENING[0][0], DOOR_OPENING[-1][0]
     for (ex, ez), k, _ in exits():
         for tex, verts in arch:
             out = []
             for x, y, z, u, v in verts:
-                x, z = rot_xz(x - ARCH_EXIT[0], z - ARCH_EXIT[1], k)
+                x, z = rot_xz(x, z, k)
                 out.append((x + ex, y, z + ez, u, v))
             kit.tris.append((tex, out))
         # threshold between the end wall and the exit
