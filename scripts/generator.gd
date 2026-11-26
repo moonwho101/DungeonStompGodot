@@ -8,12 +8,12 @@ const DIR_S := [0, -1]
 const DIR_W := [-1, 0]
 const DIR_E := [1, 0]
 
-const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09"]
+const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09", "ROOM10"]
 
 # Rooms only placed 20% of the time when picked.
-const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09"]
+const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09", "ROOM10"]
 # Big rooms: attach only to corridors, crossings never attach to them, 4-8 torches and 4-6 items.
-const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08", "ROOM09"]
+const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08", "ROOM09", "ROOM10"]
 
 const OBJECTS := {
 	"CORRIDOR01": [
@@ -69,6 +69,12 @@ const OBJECTS := {
 		{"pos": [158, -375], "out": DIR_S, "y": 0},
 		{"pos": [-375, 158], "out": DIR_W, "y": 0},
 	],
+	# Windowed observatory floating in the void, built by tools/room_observatory.py. Its bounding
+	# box reaches past the windows so the view out stays clear.
+	"ROOM10": [
+		{"pos": [520, 0], "out": DIR_E, "y": 0},
+		{"pos": [-520, 0], "out": DIR_W, "y": 0},
+	],
 }
 
 const BOUNDING_BOXES_FULL := {
@@ -84,6 +90,7 @@ const BOUNDING_BOXES_FULL := {
 	"ROOM07": [-417, -620, 417, 621],
 	"ROOM08": [-583, -583, 583, 583],
 	"ROOM09": [-438, -438, 438, 438],
+	"ROOM10": [-585, -666, 597, 677],
 }
 
 const FLOOR_SLOTS := {
@@ -101,6 +108,8 @@ const FLOOR_SLOTS := {
 		[-127.0, -127.0], [-200.0, 0.0], [-300.0, -300.0], [127.0, -127.0], [0.0, -200.0], [300.0, -300.0]],
 	"ROOM09": [[0.0, 0.0], [140.0, -235.0], [87.0, -107.0], [-107.0, 87.0], [-235.0, 140.0],
 		[-21.0, -227.0], [256.0, -112.0], [-227.0, -21.0], [-112.0, 256.0]],
+	"ROOM10": [[0.0, 0.0], [250.0, 0.0], [-250.0, 0.0], [150.0, 250.0], [-150.0, 250.0],
+		[150.0, -250.0], [-150.0, -250.0], [380.0, -120.0], [-380.0, 120.0]],
 }
 
 # Wall torch spots per piece: [local x, local z, facing rotation].
@@ -118,20 +127,25 @@ const TORCH_POSITIONS := {
 		[-254 + 200, 296 - 20, 90], [-254 + 400, 296 - 20, 90]],
 	# Side walls at x = ±370 (arches span z -488..1), end walls near z -529 / 596.
 	"ROOM07": [
-		[-315, -49, 180], [-315, 151, 180], [-315, 351, 180],
-		[315, -49, 0], [315, 151, 0], [315, 351, 0],
-		[-326, -429, 270], [-126, -429, 270], [126, -429, 270], [326, -429, 270],
-		[-326, 477, 90], [-126, 477, 90], [126, 477, 90], [326, 477, 90]],
+		[-305, -49, 180], [-305, 151, 180], [-305, 351, 180],
+		[305, -49, 0], [305, 151, 0], [305, 351, 0],
+		[-326, -419, 270], [-126, -419, 270], [126, -419, 270], [326, -419, 270],
+		[-326, 467, 90], [-126, 467, 90], [126, 467, 90], [326, 467, 90]],
 	# Beside each diagonal shrine niche, then on the inner face of each pillar.
 	"ROOM08": [
-		[446, 297, 45], [297, 446, 45], [-297, 446, 135], [-446, 297, 135],
-		[-446, -297, 225], [-297, -446, 225], [297, -446, 315], [446, -297, 315],
-		[239, 99, 22], [99, 239, 68], [-99, 239, 112], [-239, 99, 158],
-		[-239, -99, 202], [-99, -239, 248], [99, -239, 292], [239, -99, 338]],
+		[460, 312, 45], [312, 460, 45], [-312, 460, 135], [-460, 312, 135],
+		[-460, -312, 225], [-312, -460, 225], [312, -460, 315], [460, -312, 315],
+		[258, 107, 22], [107, 258, 68], [-107, 258, 112], [-258, 107, 158],
+		[-258, -107, 202], [-107, -258, 248], [107, -258, 292], [258, -107, 338]],
 	# Outer wall beside each rib, then the inner wall in the middle of each bay.
 	"ROOM09": [
-		[367, -174, 15], [291, 10, 30], [169, 169, 45], [11, 291, 60], [-174, 367, 75],
-		[-80, -333, 188], [-99, -259, 202], [-138, -192, 218], [-192, -138, 232], [-259, -99, 248], [-333, -80, 262]],
+		[386, -169, 15], [308, 20, 30], [183, 183, 45], [21, 308, 60],
+		[-169, 386, 75], [-99, -336, 188], [-118, -267, 202], [-154, -205, 218],
+		[-205, -154, 232], [-267, -118, 248], [-336, -99, 262]],
+	# Wall piers between the side windows, and the angled walls next to the side walls.
+	"ROOM10": [
+		[321, 400, 45], [100, 430, 90], [-100, 430, 90], [-321, 400, 135],
+		[-321, -400, 225], [-100, -430, 270], [100, -430, 270], [321, -400, 315]],
 }
 
 const MIN_SPIRAL_START_DISTANCE := 500.0
