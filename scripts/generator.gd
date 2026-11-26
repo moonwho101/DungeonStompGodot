@@ -75,8 +75,8 @@ const OBJECTS := {
 		{"pos": [520, 0], "out": DIR_E, "y": 0},
 		{"pos": [-520, 0], "out": DIR_W, "y": 0},
 	],
-	# Open-air terrace over the void with ENTRANCE titans at both doors, built by tools/room_terrace.py.
-	# Its bounding box reaches out past the bastion so the view stays clear.
+	# Open-air terrace floating in the void, ENTRANCE titans at both doors, built by tools/room_terrace.py.
+	# Its bounding box reaches past both balustrades so the view stays clear.
 	"ROOM11": [
 		{"pos": [520, 0], "out": DIR_E, "y": 0},
 		{"pos": [-520, 0], "out": DIR_W, "y": 0},
@@ -97,7 +97,7 @@ const BOUNDING_BOXES_FULL := {
 	"ROOM08": [-583, -583, 583, 583],
 	"ROOM09": [-438, -438, 438, 438],
 	"ROOM10": [-585, -666, 597, 677],
-	"ROOM11": [-557, -1279, 557, 420],
+	"ROOM11": [-592, -1008, 592, 992],
 }
 
 const FLOOR_SLOTS := {
@@ -118,7 +118,7 @@ const FLOOR_SLOTS := {
 	"ROOM10": [[0.0, 0.0], [250.0, 0.0], [-250.0, 0.0], [150.0, 250.0], [-150.0, 250.0],
 		[150.0, -250.0], [-150.0, -250.0], [380.0, -120.0], [-380.0, 120.0]],
 	"ROOM11": [[0.0, 0.0], [220.0, 150.0], [-220.0, 150.0], [220.0, -150.0], [-220.0, -150.0],
-		[0.0, 260.0], [0.0, -300.0], [230.0, -420.0], [-230.0, -420.0], [0.0, -540.0]],
+		[0.0, 330.0], [0.0, -330.0], [230.0, -430.0], [-230.0, 430.0], [0.0, 560.0], [0.0, -560.0]],
 }
 
 # Wall torch spots per piece: [local x, local z, facing rotation].
@@ -155,10 +155,11 @@ const TORCH_POSITIONS := {
 	"ROOM10": [
 		[321, 400, 45], [100, 430, 90], [-100, 430, 90], [-321, 400, 135],
 		[-321, -400, 225], [-100, -430, 270], [100, -430, 270], [321, -400, 315]],
-	# Front of each pilaster on the back wall, then the inner face of each balustrade pier.
+	# Room-facing side of each corner pylon, then the inner face of each pier on both balustrades.
 	"ROOM11": [
-		[-355, 330, 90], [-175, 330, 90], [175, 330, 90], [355, 330, 90],
-		[-347, -486, 230], [-185, -580, 250], [0, -613, 270], [185, -580, 290], [347, -486, 310]],
+		[479, -370, 0], [479, 370, 0], [-479, -370, 180], [-479, 370, 180],
+		[-347, -486, 230], [-185, -580, 250], [0, -613, 270], [185, -580, 290], [347, -486, 310],
+		[-347, 486, 130], [-185, 580, 110], [0, 613, 90], [185, 580, 70], [347, 486, 50]],
 }
 
 const MIN_SPIRAL_START_DISTANCE := 500.0

@@ -69,8 +69,8 @@ OBJECTS = {
         {'pos': (520, 0), 'out': DIR_E, 'y': 0},
         {'pos': (-520, 0), 'out': DIR_W, 'y': 0}
     ],
-    # Open-air terrace over the void with ENTRANCE titans at both doors, built by tools/room_terrace.py.
-    # Its bounding box reaches out past the bastion so the view stays clear.
+    # Open-air terrace floating in the void, ENTRANCE titans at both doors, built by tools/room_terrace.py.
+    # Its bounding box reaches past both balustrades so the view stays clear.
     'ROOM11': [#(-557, -1279, 557, 420)
         {'pos': (520, 0), 'out': DIR_E, 'y': 0},
         {'pos': (-520, 0), 'out': DIR_W, 'y': 0}
@@ -98,7 +98,7 @@ BOUNDING_BOXES_FULL = {
     'ROOM08':       (-583, -583, 583, 583),
     'ROOM09':       (-438, -438, 438, 438),
     'ROOM10':       (-585, -666, 597, 677),
-    'ROOM11':       (-557, -1279, 557, 420)
+    'ROOM11':       (-592, -1008, 592, 992)
 }
 
 
@@ -193,7 +193,7 @@ FLOOR_SLOTS = {
     'ROOM11': [
         (0.0, 0.0),          # center
         (220.0, 150.0), (-220.0, 150.0), (220.0, -150.0), (-220.0, -150.0),
-        (0.0, 260.0), (0.0, -300.0), (230.0, -420.0), (-230.0, -420.0), (0.0, -540.0)
+        (0.0, 330.0), (0.0, -330.0), (230.0, -430.0), (-230.0, 430.0), (0.0, 560.0), (0.0, -560.0)
     ]
 }
 
@@ -245,10 +245,11 @@ TORCH_POSITIONS = {
         (321, 400, 45), (100, 430, 90), (-100, 430, 90), (-321, 400, 135),
         (-321, -400, 225), (-100, -430, 270), (100, -430, 270), (321, -400, 315)
     ],
-    # Front of each pilaster on the back wall, then the inner face of each balustrade pier.
+    # Room-facing side of each corner pylon, then the inner face of each pier on both balustrades.
     'ROOM11': [
-        (-355, 330, 90), (-175, 330, 90), (175, 330, 90), (355, 330, 90),
-        (-347, -486, 230), (-185, -580, 250), (0, -613, 270), (185, -580, 290), (347, -486, 310)
+        (479, -370, 0), (479, 370, 0), (-479, -370, 180), (-479, 370, 180),
+        (-347, -486, 230), (-185, -580, 250), (0, -613, 270), (185, -580, 290), (347, -486, 310),
+        (-347, 486, 130), (-185, 580, 110), (0, 613, 90), (185, 580, 70), (347, 486, 50)
     ]
 }
 
