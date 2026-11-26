@@ -1626,7 +1626,7 @@ func add_player_xp(amount: float) -> void:
 		fx.create_floating_text("LEVEL UP! LVL %d" % player_stats.level, pos, "#facc15")
 		fx.create_pickup_particle_burst(pos, 0xfacc15)
 		ui.flash_screen("xp", 0.6, 250)
-		audio.play_sound("treasure.wav", 0.8)
+		audio.play_sound("win.wav", 0.8)
 
 
 func award_player_xp(amount: float) -> void:
