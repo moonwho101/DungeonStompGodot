@@ -8,12 +8,12 @@ const DIR_S := [0, -1]
 const DIR_W := [-1, 0]
 const DIR_E := [1, 0]
 
-const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09", "ROOM10"]
+const OBJECT_ORDER := ["CORRIDOR01", "CORRIDOR02", "CORRIDOR03", "CROSSING01", "CROSSING02", "CROSSING03", "ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09", "ROOM10", "ROOM11"]
 
 # Rooms only placed 20% of the time when picked.
-const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09", "ROOM10"]
+const RARE_ROOMS := ["ROOM02", "ROOM05", "ROOM06", "ROOM07", "ROOM08", "ROOM09", "ROOM10", "ROOM11"]
 # Big rooms: attach only to corridors, crossings never attach to them, 4-8 torches and 4-6 items.
-const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08", "ROOM09", "ROOM10"]
+const LARGE_ROOMS := ["ROOM05", "ROOM07", "ROOM08", "ROOM09", "ROOM10", "ROOM11"]
 
 const OBJECTS := {
 	"CORRIDOR01": [
@@ -75,6 +75,12 @@ const OBJECTS := {
 		{"pos": [520, 0], "out": DIR_E, "y": 0},
 		{"pos": [-520, 0], "out": DIR_W, "y": 0},
 	],
+	# Open-air terrace over the void with ENTRANCE titans at both doors, built by tools/room_terrace.py.
+	# Its bounding box reaches out past the bastion so the view stays clear.
+	"ROOM11": [
+		{"pos": [520, 0], "out": DIR_E, "y": 0},
+		{"pos": [-520, 0], "out": DIR_W, "y": 0},
+	],
 }
 
 const BOUNDING_BOXES_FULL := {
@@ -91,6 +97,7 @@ const BOUNDING_BOXES_FULL := {
 	"ROOM08": [-583, -583, 583, 583],
 	"ROOM09": [-438, -438, 438, 438],
 	"ROOM10": [-585, -666, 597, 677],
+	"ROOM11": [-557, -1279, 557, 420],
 }
 
 const FLOOR_SLOTS := {
@@ -110,6 +117,8 @@ const FLOOR_SLOTS := {
 		[-21.0, -227.0], [256.0, -112.0], [-227.0, -21.0], [-112.0, 256.0]],
 	"ROOM10": [[0.0, 0.0], [250.0, 0.0], [-250.0, 0.0], [150.0, 250.0], [-150.0, 250.0],
 		[150.0, -250.0], [-150.0, -250.0], [380.0, -120.0], [-380.0, 120.0]],
+	"ROOM11": [[0.0, 0.0], [220.0, 150.0], [-220.0, 150.0], [220.0, -150.0], [-220.0, -150.0],
+		[0.0, 260.0], [0.0, -300.0], [230.0, -420.0], [-230.0, -420.0], [0.0, -540.0]],
 }
 
 # Wall torch spots per piece: [local x, local z, facing rotation].
@@ -146,6 +155,10 @@ const TORCH_POSITIONS := {
 	"ROOM10": [
 		[321, 400, 45], [100, 430, 90], [-100, 430, 90], [-321, 400, 135],
 		[-321, -400, 225], [-100, -430, 270], [100, -430, 270], [321, -400, 315]],
+	# Front of each pilaster on the back wall, then the inner face of each balustrade pier.
+	"ROOM11": [
+		[-355, 330, 90], [-175, 330, 90], [175, 330, 90], [355, 330, 90],
+		[-347, -486, 230], [-185, -580, 250], [0, -613, 270], [185, -580, 290], [347, -486, 310]],
 }
 
 const MIN_SPIRAL_START_DISTANCE := 500.0

@@ -184,20 +184,11 @@ def _in_hull(planes, p, tol=0.6):
     return all(n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d <= tol for n, d in planes)
 
 
-def arch_triangles():
-    """ROOM05's entrance arch relative to its exit (x = 0 at the exit, +x outward).
-
-    Faces that can never be seen are dropped: the pedestal undersides below the floor and the
-    faces of each block that are pressed against a neighbouring block."""
-    lines, _ = rb.read_lines(rb.OBJECTS_DAT)
-    start, end, _ = rb.find_object(lines, ARCH_SOURCE)
-    arch = [(tex, [(x - ARCH_EXIT[0], y, z - ARCH_EXIT[1], u, v) for x, y, z, u, v in verts])
-            for tex, verts in rb.parse_triangles(lines[start + 1:end]) if tex in ARCH_TEXTURES]
-    if not arch:
-        raise SystemExit('No arch geometry found in %s' % ARCH_SOURCE)
-
-    # the arch is built from closed convex blocks: group triangles sharing vertices
-    parent = list(range(len(arch)))
+def drop_hidden(tris, floor_y):
+    """Drops faces that can never be seen: those lying below floor_y and those pressed inside
+    another block. Blocks are groups of triangles sharing vertices; only closed convex blocks can
+    hide other faces."""
+    parent = list(range(len(tris)))
 
     def root(i):
         while parent[i] != i:
@@ -205,24 +196,35 @@ def arch_triangles():
             i = parent[i]
         return i
 
+    def key(p):
+        return tuple(round(c, 2) for c in p[:3])
+
     owner = {}
-    for i, (_, verts) in enumerate(arch):
+    for i, (_, verts) in enumerate(tris):
         for p in verts:
-            key = tuple(round(c, 2) for c in p[:3])
-            if key in owner:
-                parent[root(i)] = root(owner[key])
+            if key(p) in owner:
+                parent[root(i)] = root(owner[key(p)])
             else:
-                owner[key] = i
+                owner[key(p)] = i
     blocks = {}
-    for i in range(len(arch)):
+    for i in range(len(tris)):
         blocks.setdefault(root(i), []).append(i)
+
     hulls = {}
     for b, idx in blocks.items():
-        pts = [p[:3] for i in idx for p in arch[i][1]]
+        edges = {}
+        for i in idx:
+            ks = [key(p) for p in tris[i][1]]
+            for j in range(3):
+                e = tuple(sorted((ks[j], ks[(j + 1) % 3])))
+                edges[e] = edges.get(e, 0) + 1
+        if any(n != 2 for n in edges.values()):
+            continue  # open shell
+        pts = [p[:3] for i in idx for p in tris[i][1]]
         c = [sum(p[k] for p in pts) / len(pts) for k in range(3)]
         planes = []
         for i in idx:
-            a, b1, c1 = (p[:3] for p in arch[i][1])
+            a, b1, c1 = (p[:3] for p in tris[i][1])
             e1 = [b1[k] - a[k] for k in range(3)]
             e2 = [c1[k] - a[k] for k in range(3)]
             n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
@@ -231,21 +233,34 @@ def arch_triangles():
             if sum(n[k] * (c[k] - a[k]) for k in range(3)) > 0:
                 n = [-x for x in n]
             planes.append((n, sum(n[k] * a[k] for k in range(3))))
-        hulls[b] = planes
+        if all(_in_hull(planes, p, 1.0) for p in pts):  # convex
+            hulls[b] = planes
 
     def hidden(i):
-        verts = [p[:3] for p in arch[i][1]]
+        verts = [p[:3] for p in tris[i][1]]
         for s in range(7):
             for t in range(7 - s):
                 w = (s / 6, t / 6, (6 - s - t) / 6)
                 p = [sum(w[j] * verts[j][k] for j in range(3)) for k in range(3)]
-                if p[1] < FY + 0.5:
+                if p[1] < floor_y + 0.5:
                     continue
                 if not any(_in_hull(h, p) for b, h in hulls.items() if b != root(i)):
                     return False
         return True
 
-    return [arch[i] for i in range(len(arch)) if not hidden(i)]
+    return [tris[i] for i in range(len(tris)) if not hidden(i)]
+
+
+def arch_triangles():
+    """ROOM05's entrance arch relative to its exit (x = 0 at the exit, +x outward), without the faces
+    that can never be seen (pedestal undersides below the floor, faces pressed against a neighbour)."""
+    lines, _ = rb.read_lines(rb.OBJECTS_DAT)
+    start, end, _ = rb.find_object(lines, ARCH_SOURCE)
+    arch = [(tex, [(x - ARCH_EXIT[0], y, z - ARCH_EXIT[1], u, v) for x, y, z, u, v in verts])
+            for tex, verts in rb.parse_triangles(lines[start + 1:end]) if tex in ARCH_TEXTURES]
+    if not arch:
+        raise SystemExit('No arch geometry found in %s' % ARCH_SOURCE)
+    return drop_hidden(arch, FY)
 
 
 def load_arch():

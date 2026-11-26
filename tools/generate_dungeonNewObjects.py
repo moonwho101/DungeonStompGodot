@@ -68,14 +68,20 @@ OBJECTS = {
     'ROOM10': [#(-585, -666, 597, 677)
         {'pos': (520, 0), 'out': DIR_E, 'y': 0},
         {'pos': (-520, 0), 'out': DIR_W, 'y': 0}
+    ],
+    # Open-air terrace over the void with ENTRANCE titans at both doors, built by tools/room_terrace.py.
+    # Its bounding box reaches out past the bastion so the view stays clear.
+    'ROOM11': [#(-557, -1279, 557, 420)
+        {'pos': (520, 0), 'out': DIR_E, 'y': 0},
+        {'pos': (-520, 0), 'out': DIR_W, 'y': 0}
     ]
 
 }
 
 # Rooms only placed 20% of the time when picked.
-RARE_ROOMS = ('ROOM02', 'ROOM05', 'ROOM06', 'ROOM07', 'ROOM08', 'ROOM09', 'ROOM10')
+RARE_ROOMS = ('ROOM02', 'ROOM05', 'ROOM06', 'ROOM07', 'ROOM08', 'ROOM09', 'ROOM10', 'ROOM11')
 # Big rooms: attach only to corridors, crossings never attach to them, 4-8 torches and 4-6 items.
-LARGE_ROOMS = ('ROOM05', 'ROOM07', 'ROOM08', 'ROOM09', 'ROOM10')
+LARGE_ROOMS = ('ROOM05', 'ROOM07', 'ROOM08', 'ROOM09', 'ROOM10', 'ROOM11')
 
 
 BOUNDING_BOXES_FULL = {
@@ -91,7 +97,8 @@ BOUNDING_BOXES_FULL = {
     'ROOM07':       (-417, -620, 417, 621),
     'ROOM08':       (-583, -583, 583, 583),
     'ROOM09':       (-438, -438, 438, 438),
-    'ROOM10':       (-585, -666, 597, 677)
+    'ROOM10':       (-585, -666, 597, 677),
+    'ROOM11':       (-557, -1279, 557, 420)
 }
 
 
@@ -182,6 +189,11 @@ FLOOR_SLOTS = {
         (0.0, 0.0),          # center
         (250.0, 0.0), (-250.0, 0.0), (150.0, 250.0), (-150.0, 250.0),
         (150.0, -250.0), (-150.0, -250.0), (380.0, -120.0), (-380.0, 120.0)
+    ],
+    'ROOM11': [
+        (0.0, 0.0),          # center
+        (220.0, 150.0), (-220.0, 150.0), (220.0, -150.0), (-220.0, -150.0),
+        (0.0, 260.0), (0.0, -300.0), (230.0, -420.0), (-230.0, -420.0), (0.0, -540.0)
     ]
 }
 
@@ -232,6 +244,11 @@ TORCH_POSITIONS = {
     'ROOM10': [
         (321, 400, 45), (100, 430, 90), (-100, 430, 90), (-321, 400, 135),
         (-321, -400, 225), (-100, -430, 270), (100, -430, 270), (321, -400, 315)
+    ],
+    # Front of each pilaster on the back wall, then the inner face of each balustrade pier.
+    'ROOM11': [
+        (-355, 330, 90), (-175, 330, 90), (175, 330, 90), (355, 330, 90),
+        (-347, -486, 230), (-185, -580, 250), (0, -613, 270), (185, -580, 290), (347, -486, 310)
     ]
 }
 
