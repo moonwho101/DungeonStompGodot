@@ -9,7 +9,7 @@ materials = []
 
 current_material = None
 
-with open("room2.obj", "r") as f:
+with open("entrance.obj", "r") as f:
     for line in f:
         line = line.strip()
 
