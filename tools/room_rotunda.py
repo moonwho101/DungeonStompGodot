@@ -459,12 +459,12 @@ def torch_positions():
     wall = WallFrame((H, k), (k, H))
     for q in range(4):
         for ds in (-105.0, 105.0):
-            x, _, z = wall.at(wall.len / 2 + ds, 0.0, -40.0)
+            x, _, z = wall.at(wall.len / 2 + ds, 0.0, -20.0)
             x, z = rot_xz(x, z, q)
             out.append((round(x), round(z), (45 + 90 * q) % 360))
     for i in range(8):
         a = math.radians(22.5 + 45 * i)
-        r = PILLAR_R - PILLAR_HALF - 45.0
+        r = PILLAR_R - PILLAR_HALF - 25.0
         out.append((round(r * math.cos(a)), round(r * math.sin(a)), int(round(22.5 + 45 * i)) % 360))
     return out
 

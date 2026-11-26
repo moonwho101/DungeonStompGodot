@@ -218,11 +218,11 @@ def torch_positions():
     out = []
     for i in range(BAY, SEGMENTS, BAY):
         deg = 90.0 * i / SEGMENTS
-        x, z = local(R_OUT - 45, deg)
+        x, z = local(R_OUT - 25, deg)
         out.append((int(x), int(z), int(round(deg)) % 360))
     for i in range(BAY // 2, SEGMENTS, BAY):
         deg = 90.0 * i / SEGMENTS
-        x, z = local(R_IN + 45, deg)
+        x, z = local(R_IN + 25, deg)
         out.append((int(x), int(z), int(round(deg + 180)) % 360))
     return out
 

@@ -248,7 +248,7 @@ def torch_positions():
         else:
             spots = [wall.len - 50.0 if abs(p1[1]) == W else 50.0]
         for s in spots:
-            x, _, z = wall.at(s, 0.0, -40.0)
+            x, _, z = wall.at(s, 0.0, -20.0)
             out.append((int(round(x)), int(round(z)), rot))
     return out
 
