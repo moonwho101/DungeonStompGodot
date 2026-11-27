@@ -60,6 +60,7 @@ const CULL_MOVE_DISTANCE := 150.0
 const PLAYER_RESPAWN_DELAY := 3.0
 const PICKUP_DISTANCE := 70.0
 const MOUSE_SENSITIVITY := 0.002
+const XR_STOP_SPEED := 1.0 # Dungeon units/s; end the tiny residual tail of movement damping.
 const AUTOSAVE_INTERVAL := 5.0
 const FALL_RECOVERY_MARGIN := 1000.0
 
@@ -1495,9 +1496,9 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 		var fly_up: bool = move_up or gp.get("fly_up", false)
 		var fly_down: bool = move_down or gp.get("fly_down", false)
 		if dir.length_squared() > 0.0:
-			var world_dir := cam_basis * (dir.limit_length() if xr_rig != null else dir.normalized())
+			var world_dir := cam_basis * dir.normalized()
 			velocity += world_dir * move_speed * 8.0 * delta
-		elif xr_rig != null and not fly_up and not fly_down:
+		elif xr_rig != null and not fly_up and not fly_down and velocity.length_squared() <= XR_STOP_SPEED * XR_STOP_SPEED:
 			velocity = Vector3.ZERO
 		if fly_up:
 			velocity.y += move_speed * 8.0 * delta
@@ -1510,8 +1511,8 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 	var damp_xz := pow(0.001, delta)
 	velocity.x *= damp_xz
 	velocity.z *= damp_xz
-	# VR release must stop artificial locomotion, not coast on desktop movement inertia.
-	if xr_rig != null and input_forward == 0.0 and input_right == 0.0:
+	if xr_rig != null and input_forward == 0.0 and input_right == 0.0 \
+			and Vector2(velocity.x, velocity.z).length_squared() <= XR_STOP_SPEED * XR_STOP_SPEED:
 		velocity.x = 0.0
 		velocity.z = 0.0
 	velocity.y -= CollisionWorld.GRAVITY * delta

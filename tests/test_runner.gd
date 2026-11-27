@@ -598,22 +598,31 @@ func _xr_locomotion_tests() -> void:
 				player._update_player_movement(dt, rig.poll(dt, false))
 				check(player.velocity.x > 0.0, "XR deliberate movement works (web %s, fly %s, %d Hz)" % [web, flying, fps])
 				player.velocity = Vector3(180, 120, -80)
+				var resting := [Vector2.ZERO, Vector2(0.1, 0), Vector2(0, -0.12), Vector2(0.1, 0.1), Vector2(0.15, 0)]
+				for frame in fps * 2:
+					tracker.set_input(stick, resting[frame % resting.size()])
+					player._update_player_movement(dt, rig.poll(dt, false))
+					if frame == 0:
+						var damp := pow(0.01 if flying else 0.001, dt)
+						check(is_equal_approx(player.velocity.x, 180.0 * damp) and is_equal_approx(player.velocity.z, -80.0 * damp)
+							and player.velocity.y > 0.0,
+							"XR release retains original coasting and vertical motion (web %s, fly %s, %d Hz)" % [web, flying, fps])
+				check(player.velocity.x == 0.0 and player.velocity.z == 0.0 and (not flying or player.velocity.y == 0.0),
+					"XR residual velocity reaches exact rest within two seconds (web %s, fly %s, %d Hz)" % [web, flying, fps])
 				var stopped_at := player.camera.position
 				var stationary := true
-				# Returning off-centre and jittering must not restart locomotion after release.
-				var resting := [Vector2.ZERO, Vector2(0.2, 0), Vector2(0, -0.22), Vector2(0.16, 0.16), Vector2(0.25, 0)]
 				for frame in fps:
 					tracker.set_input(stick, resting[frame % resting.size()])
 					player._update_player_movement(dt, rig.poll(dt, false))
 					stationary = stationary and player.camera.position.x == stopped_at.x and player.camera.position.z == stopped_at.z
-					if frame == 0:
-						check(player.velocity.y == 0.0 if flying else player.velocity.y > 0.0,
-							"XR release stops flight but preserves jump velocity (web %s, fly %s, %d Hz)" % [web, flying, fps])
 				check(stationary and player.velocity.x == 0.0 and player.velocity.z == 0.0,
-					"XR release and resting stick stay stopped for one second (web %s, fly %s, %d Hz)" % [web, flying, fps])
-		tracker.set_input(stick, Vector2(0.26, 0))
+					"XR stays stopped after coasting for one second (web %s, fly %s, %d Hz)" % [web, flying, fps])
+		tracker.set_input(stick, Vector2(0.16, 0))
 		var slow := rig.poll(0.016, false)
 		check(slow.move_x > 0.0 and slow.move_x < 0.02, "XR movement ramps smoothly just outside the centre dead zone")
+		tracker.set_input(stick, Vector2(0.5, 0))
+		check(is_equal_approx(rig.poll(0.016, false).move_x, 0.35 / 0.85),
+			"XR half-stick movement retains the original response")
 		player.velocity = Vector3.ZERO
 		player._update_player_movement(0.016, slow)
 		var slow_speed := player.velocity.x
@@ -622,8 +631,8 @@ func _xr_locomotion_tests() -> void:
 		check(is_equal_approx(full.move_x, 1.0), "XR full stick retains full speed")
 		player.velocity = Vector3.ZERO
 		player._update_player_movement(0.016, full)
-		check(slow_speed > 0.0 and is_equal_approx(slow_speed / player.velocity.x, slow.move_x),
-			"XR flight preserves analog speed rather than amplifying a small input to full speed")
+		check(slow_speed > 0.0 and is_equal_approx(slow_speed, player.velocity.x),
+			"XR flight retains the original full speed outside the dead zone")
 	player.fly_mode = false
 	player.camera.position = Vector3(0, 1000, 0)
 	player.velocity = Vector3.ZERO
