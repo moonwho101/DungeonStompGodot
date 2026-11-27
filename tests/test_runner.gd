@@ -488,12 +488,17 @@ func _webxr_ui_transition_test() -> void:
 	host.add_child(ui)
 	check(ui._btn_webxr == null, "VR menu button only exists in the web build")
 	ui.set_webxr_state("Enter VR", true)
-	var original_font := ui._btn_new.get_theme_font("font")
+	var original_font: Font = ui._menu_original_fonts[ui._btn_new]
 	ui._prepare_web_menu_font()
 	await process_frame
 	await process_frame
+	var web_font := ui._btn_new.get_theme_font("font")
+	var web_base := web_font
+	while web_base is FontVariation:
+		web_base = (web_base as FontVariation).base_font
 	check(ui._web_menu_font != ThemeDB.fallback_font and ui._web_menu_font.multichannel_signed_distance_field and
-		ui._btn_new.get_theme_font("font") == ui._web_menu_font and not original_font.multichannel_signed_distance_field,
+		web_font == ui._scaled_font(original_font) and web_base == ui._web_menu_font and
+		not ThemeDB.fallback_font.multichannel_signed_distance_field,
 		"Web menu uses a private MSDF font and leaves the VR font unchanged")
 	var vs := root.get_visible_rect().size
 	var desktop_scale := ui._menu.scale.x
@@ -514,13 +519,17 @@ func _webxr_ui_transition_test() -> void:
 		await process_frame
 		check(ui._menu.scale == Vector2.ONE and ui._btn_new.get_theme_font("font") == original_font,
 			"WebXR session shows the menu at its VR size and font (%d)" % iteration)
+		check(ui._controls_vr.visible and not ui._controls_flat.visible and not ui._opt_fullscreen.visible,
+			"WebXR session shows VR controller bindings (%d)" % iteration)
 		check(minimap.get_parent() != parent and rig.overlays.size() == 3, "WebXR session detaches HUD panels (%d)" % iteration)
 		rig.detach_hud_overlays()
 		ui.restore_hud_panels()
 		ui.move_to_viewport(host)
 		await process_frame
-		check(is_equal_approx(ui._menu.scale.x, desktop_scale) and ui._btn_new.get_theme_font("font") == ui._web_menu_font,
+		check(is_equal_approx(ui._menu.scale.x, desktop_scale) and ui._btn_new.get_theme_font("font") == web_font,
 			"Ending the WebXR session restores the web menu (%d)" % iteration)
+		check(ui._controls_flat.visible and not ui._controls_vr.visible,
+			"Ending the WebXR session restores keyboard/gamepad bindings (%d)" % iteration)
 		check(minimap.get_parent() == parent and not ui._hud_detached and rig.overlays.is_empty() and
 			[minimap.offset_left, minimap.offset_top, minimap.offset_right, minimap.offset_bottom] == offsets,
 			"Ending the WebXR session restores the desktop HUD layout (%d)" % iteration)
