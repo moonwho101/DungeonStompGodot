@@ -1458,18 +1458,24 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 	var move_speed := 400.0 if sprint else 200.0
 	var gmx: float = gp.get("move_x", 0.0)
 	var gmy: float = gp.get("move_y", 0.0)
+	var input_forward := float(move_forward) - float(move_backward) - gmy
+	var input_right := float(move_right) - float(move_left) + gmx
 	var cam_basis := camera.global_transform.basis
 
 	if fly_mode:
 		var damp := pow(0.01, delta)
 		velocity *= damp
-		var dir := Vector3(float(move_right) - float(move_left) + gmx, 0.0, float(move_backward) - float(move_forward) + gmy)
+		var dir := Vector3(input_right, 0.0, -input_forward)
+		var fly_up: bool = move_up or gp.get("fly_up", false)
+		var fly_down: bool = move_down or gp.get("fly_down", false)
 		if dir.length_squared() > 0.0:
-			var world_dir := cam_basis * dir.normalized()
+			var world_dir := cam_basis * (dir.limit_length() if xr_rig != null else dir.normalized())
 			velocity += world_dir * move_speed * 8.0 * delta
-		if move_up or gp.get("fly_up", false):
+		elif xr_rig != null and not fly_up and not fly_down:
+			velocity = Vector3.ZERO
+		if fly_up:
 			velocity.y += move_speed * 8.0 * delta
-		if move_down or gp.get("fly_down", false):
+		if fly_down:
 			velocity.y -= move_speed * 8.0 * delta
 		camera.position += velocity * delta
 		_recover_player_if_fallen()
@@ -1478,6 +1484,10 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 	var damp_xz := pow(0.001, delta)
 	velocity.x *= damp_xz
 	velocity.z *= damp_xz
+	# VR release must stop artificial locomotion, not coast on desktop movement inertia.
+	if xr_rig != null and input_forward == 0.0 and input_right == 0.0:
+		velocity.x = 0.0
+		velocity.z = 0.0
 	velocity.y -= CollisionWorld.GRAVITY * delta
 	if jump_requested:
 		if is_grounded:
@@ -1492,8 +1502,6 @@ func _update_player_movement(delta: float, gp: Dictionary) -> void:
 	right.y = 0.0
 	right = right.normalized() if right.length_squared() > 1e-6 else Vector3(1, 0, 0)
 
-	var input_forward := float(move_forward) - float(move_backward) - gmy
-	var input_right := float(move_right) - float(move_left) + gmx
 	var world_dir := forward * input_forward + right * input_right
 	var dir_len := world_dir.length()
 	if dir_len > 0.001:

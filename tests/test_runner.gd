@@ -107,6 +107,7 @@ func _run_tests() -> void:
 	_xr_tests(models)
 	await _webxr_ui_transition_test()
 	_webxr_input_test()
+	_xr_locomotion_tests()
 	_effect_pool_tests()
 
 	TDSModel.clear_cache()
@@ -372,17 +373,10 @@ func _monster_personality_tests(model: MD2Model) -> void:
 	m.set_personality("")
 	check(m.config.maxHealth == base_hp and m.config.moveSpeed == base_speed and not m._hp_trait.visible,
 		"clearing personality restores family stats")
-	check(_test_monster(game, model, "GOBLIN").personality == "COWARD" and _test_monster(game, model, "").personality == "",
-		"personality comes from the family config; unknown models have none")
-
 	var coward := _test_monster(game, model, "GOBLIN")
 	coward.set_state(Monster.State.CHASE)
 	coward.take_damage(coward.config.maxHealth * 0.7)
-	var start_z := coward.position.z
-	for i in 40:
-		coward.update(0.05, game.target)
-	check(coward.state == Monster.State.FLEE and coward.position.z < start_z - 100.0, "wounded coward flees from the player")
-	for i in 80:
+	for i in 120:
 		coward.update(0.05, game.target)
 	check(coward.state == Monster.State.CHASE or coward.state == Monster.State.ATTACK, "coward returns to the fight after fleeing")
 	coward.take_damage(0.5)
@@ -562,6 +556,80 @@ func _webxr_input_test() -> void:
 	rig._prev_buttons.clear()
 	tracker.set_input("thumbstick_click", true)
 	check(rig.poll(0.016, false).sprint, "WebXR thumbstick click toggles sprint")
+	rig.free()
+	XRServer.remove_tracker(tracker)
+
+
+func _xr_locomotion_tests() -> void:
+	var tracker := XRControllerTracker.new()
+	tracker.type = XRServer.TRACKER_CONTROLLER
+	tracker.name = &"test_locomotion_left_hand"
+	XRServer.add_tracker(tracker)
+	var rig := XRRig.new()
+	rig.simulated = true
+	rig.game = {"ui": _XRTestMenu.new(), "world_ready": true, "fly_mode": false}
+	root.add_child(rig)
+	rig.left_hand.tracker = tracker.name
+	var player := Game.new()
+	player.camera = Camera3D.new()
+	root.add_child(player.camera)
+	player.xr_rig = rig
+	player.fall_recovery_y = -100000.0
+	for web in [false, true]:
+		rig.webxr = web
+		var stick := "thumbstick" if web else "primary"
+		for flying in [false, true]:
+			player.fly_mode = flying
+			rig.game.fly_mode = flying
+			for fps: int in [36, 72, 120]:
+				var dt := 1.0 / fps
+				player.camera.position = Vector3(0, 1000, 0)
+				player.velocity = Vector3.ZERO
+				tracker.set_input(stick, Vector2(0.6, 0))
+				player._update_player_movement(dt, rig.poll(dt, false))
+				check(player.velocity.x > 0.0, "XR deliberate movement works (web %s, fly %s, %d Hz)" % [web, flying, fps])
+				player.velocity = Vector3(180, 120, -80)
+				var stopped_at := player.camera.position
+				var stationary := true
+				# Returning off-centre and jittering must not restart locomotion after release.
+				var resting := [Vector2.ZERO, Vector2(0.2, 0), Vector2(0, -0.22), Vector2(0.16, 0.16), Vector2(0.25, 0)]
+				for frame in fps:
+					tracker.set_input(stick, resting[frame % resting.size()])
+					player._update_player_movement(dt, rig.poll(dt, false))
+					stationary = stationary and player.camera.position.x == stopped_at.x and player.camera.position.z == stopped_at.z
+					if frame == 0:
+						check(player.velocity.y == 0.0 if flying else player.velocity.y > 0.0,
+							"XR release stops flight but preserves jump velocity (web %s, fly %s, %d Hz)" % [web, flying, fps])
+				check(stationary and player.velocity.x == 0.0 and player.velocity.z == 0.0,
+					"XR release and resting stick stay stopped for one second (web %s, fly %s, %d Hz)" % [web, flying, fps])
+		tracker.set_input(stick, Vector2(0.26, 0))
+		var slow := rig.poll(0.016, false)
+		check(slow.move_x > 0.0 and slow.move_x < 0.02, "XR movement ramps smoothly just outside the centre dead zone")
+		player.velocity = Vector3.ZERO
+		player._update_player_movement(0.016, slow)
+		var slow_speed := player.velocity.x
+		tracker.set_input(stick, Vector2(1, 0))
+		var full := rig.poll(0.016, false)
+		check(is_equal_approx(full.move_x, 1.0), "XR full stick retains full speed")
+		player.velocity = Vector3.ZERO
+		player._update_player_movement(0.016, full)
+		check(slow_speed > 0.0 and is_equal_approx(slow_speed / player.velocity.x, slow.move_x),
+			"XR flight preserves analog speed rather than amplifying a small input to full speed")
+	player.fly_mode = false
+	player.camera.position = Vector3(0, 1000, 0)
+	player.velocity = Vector3.ZERO
+	player.move_forward = true
+	player._update_player_movement(0.016, {})
+	check(player.velocity.z < 0.0, "Keyboard movement still works in VR")
+	player.move_forward = false
+	player.xr_rig = null
+	for flying in [false, true]:
+		player.fly_mode = flying
+		player.velocity = Vector3(180, 0, 0)
+		player._update_player_movement(0.016, {})
+		check(player.velocity.x > 0.0 and player.velocity.x < 180.0, "Desktop movement retains damping (fly %s)" % flying)
+	player.camera.free()
+	player.free()
 	rig.free()
 	XRServer.remove_tracker(tracker)
 

@@ -12,6 +12,7 @@ extends Node3D
 
 const UNITS_PER_METER := 60.0 # CollisionWorld.EYE_HEIGHT (100 units) ~ 1.7 m
 const STICK_DEADZONE := 0.15
+const MOVE_DEADZONE := 0.25 # Extra centre tolerance for thumbsticks that do not return exactly to rest.
 const TURN_SPEED := 2.4 # rad/s, smooth turn on the right stick
 # Swing detection uses the hand's speed relative to the head (m/s × UNITS_PER_METER).
 const SWING_START_SPEED := 1.8 * UNITS_PER_METER # hand speed needed to start a swing
@@ -491,11 +492,11 @@ func _just(c: XRController3D, button: String) -> bool:
 	return down and not was
 
 
-static func _stick(v: Vector2) -> Vector2:
+static func _stick(v: Vector2, deadzone: float = STICK_DEADZONE) -> Vector2:
 	var mag := v.length()
-	if mag <= STICK_DEADZONE:
+	if mag <= deadzone:
 		return Vector2.ZERO
-	return v * (minf(1.0, (mag - STICK_DEADZONE) / (1.0 - STICK_DEADZONE)) / mag)
+	return v * (minf(1.0, (mag - deadzone) / (1.0 - deadzone)) / mag)
 
 
 # Reads the controllers into the same dictionary shape GamepadInput.poll returns. Also drives the UI pointer
@@ -527,7 +528,7 @@ func poll(delta: float, paused: bool) -> Dictionary:
 		return {}
 
 	var stick := "thumbstick" if webxr else "primary"
-	var move := _stick(left_hand.get_vector2(stick))
+	var move := _stick(left_hand.get_vector2(stick), MOVE_DEADZONE)
 	var look := _stick(right_grip.get_vector2(stick))
 	if l3:
 		_sprint_toggle = not _sprint_toggle
