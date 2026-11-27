@@ -71,8 +71,14 @@ var _toast_timer := 0.0
 
 # Menu
 var _menu: PanelContainer
+var _menu_dim: ColorRect
 var _web_menu_font: FontFile
 var _menu_original_fonts: Dictionary[Control, Font] = {}
+var _scaled_fonts: Dictionary[Font, Font] = {}
+var _font_title: FontVariation
+var _font_heading: FontVariation
+var _font_section: FontVariation
+var _font_button: FontVariation
 var _views: Dictionary = {}
 var _current_view := "main"
 var _prompt: Label
@@ -81,22 +87,26 @@ var _btn_new: Button
 var _btn_resume: Button
 var _btn_generator: Button
 var _btn_options: Button
-var _btn_webxr: Button # web build only: starts a WebXR session
+var _btn_controls: Button
+var _btn_webxr: Button # web build only: starts/ends a WebXR session
+var _controls_flat: HBoxContainer
+var _controls_vr: VBoxContainer
 var _btn_generate: Button
 var _btn_gen_back: Button
 var _gen_size: HSlider
 var _gen_size_val: Label
 var _gen_seed: LineEdit
-var _opt_normal: CheckBox
-var _opt_music: CheckBox
-var _opt_vibration: CheckBox
-var _opt_invert: CheckBox
-var _opt_hud: CheckBox
-var _opt_god: CheckBox
-var _opt_fly: CheckBox
+var _opt_normal: CheckButton
+var _opt_music: CheckButton
+var _opt_vibration: CheckButton
+var _opt_invert: CheckButton
+var _opt_hud: CheckButton
+var _opt_god: CheckButton
+var _opt_fly: CheckButton
+var _opt_fullscreen: CheckButton
+var _opt_tip: Label # keyboard shortcuts; hidden on the VR panel
 var _opt_sens: HSlider
 var _opt_sens_val: Label
-var _btn_fullscreen: Button
 var _btn_opt_back: Button
 var _syncing := false
 
@@ -118,6 +128,7 @@ func _ready() -> void:
 	_build_hud(root)
 	_build_loading(root)
 	_build_menu(root)
+	_collect_menu_fonts()
 	if OS.has_feature("web"):
 		_prepare_web_menu_font()
 	_build_toast(root)
@@ -661,79 +672,262 @@ func _set_fill(fill: ColorRect, pct: float) -> void:
 
 # ---------------------------------------------------------------- Menu
 
+const GOLD := Color("#fbbf24")
+const TEXT := Color("#e2e8f0")
+const MUTED := Color("#94a3b8")
+const DESKTOP_MENU_SCALE := 1.6 # desktop: the layout is authored for the 1280x720 VR canvas, so enlarge it on the 4K canvas
+const SWITCH_SIZE := Vector2(46, 24)
+const KNOB_SIZE := 18.0
+
+const KEYBOARD_CONTROLS := [["WASD", "Move"], ["Mouse", "Look"], ["Left Click", "Attack / Cast"],
+	["Shift", "Sprint"], ["Space", "Jump"], ["E", "Open Door / Chest"], ["Q / Z", "Switch Weapon"],
+	["F", "Fly Mode"], ["G", "Regenerate Dungeon"], ["H", "Toggle HUD"], ["Esc", "Menu"]]
+const GAMEPAD_CONTROLS := [["L-Stick", "Move (L3 Sprint)"], ["R-Stick", "Look (R3 Level)"], ["RT", "Attack / Cast"],
+	["A", "Jump / Confirm"], ["X", "Open Door / Chest"], ["LB / RB", "Switch Weapon"], ["LT", "Sprint"],
+	["Start", "Menu"]]
+const VR_CONTROLS := [["L-Stick", "Move (click to Sprint)"], ["R-Stick", "Turn"], ["Swing", "Melee Attack"],
+	["R-Trigger", "Cast Spell / Select"], ["A", "Jump"], ["B", "Open Door / Chest / Back"], ["X / Y", "Switch Weapon"],
+	["L-Trigger / Menu", "Menu"]]
+
+
+# Vector divider (line - diamond - line); drawn rather than typed so it renders identically on every platform.
+class Ornament:
+	extends Control
+	var color := Color("#f59e0b")
+
+	func _init(width: float = 300.0) -> void:
+		custom_minimum_size = Vector2(width, 12)
+		size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var faded := Color(color, 0.0)
+		var gap := 16.0
+		for side in [-1.0, 1.0]:
+			var a := Vector2(c.x + side * gap, c.y)
+			var b := Vector2(c.x + side * c.x, c.y)
+			draw_polygon(PackedVector2Array([a + Vector2(0, -0.75), b + Vector2(0, -0.75), b + Vector2(0, 0.75), a + Vector2(0, 0.75)]),
+				PackedColorArray([color, faded, faded, color]))
+			_diamond(Vector2(c.x + side * 10.0, c.y), 2.5, Color(color, 0.7))
+		_diamond(c, 5.5, color)
+
+	func _diamond(p: Vector2, r: float, col: Color) -> void:
+		draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0)]), col)
+
+
+# Crossed swords drawn with primitives (replaces the emoji, which the web build's font can't render).
+class SwordsEmblem:
+	extends Control
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(44, 44)
+		size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		for angle in [-PI / 4.0, PI / 4.0]:
+			draw_set_transform(size * 0.5, angle, Vector2.ONE * size.y / 52.0)
+			draw_colored_polygon(PackedVector2Array([Vector2(-2.6, 8), Vector2(-2.6, -18), Vector2(0, -25),
+				Vector2(2.6, -18), Vector2(2.6, 8)]), Color("#e2e8f0"))
+			draw_line(Vector2(0, 6), Vector2(0, -19), Color("#94a3b8"), 1.0)
+			draw_rect(Rect2(-9, 8, 18, 3.5), Color("#f59e0b"))
+			draw_rect(Rect2(-1.6, 11.5, 3.2, 8.5), Color("#92400e"))
+			draw_circle(Vector2(0, 22), 2.8, Color("#fbbf24"))
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+# Full-width option row with an animated on/off switch on the right.
+class MenuToggle:
+	extends CheckButton
+	var _knob := 0.0
+
+	func _init() -> void:
+		var blank := ImageTexture.create_from_image(Image.create_empty(int(SWITCH_SIZE.x), int(SWITCH_SIZE.y), false,
+			Image.FORMAT_RGBA8)) # transparent; reserves the switch area, the switch itself is drawn in _draw
+		for k in ["checked", "unchecked", "checked_disabled", "unchecked_disabled", "checked_mirrored",
+				"unchecked_mirrored", "checked_disabled_mirrored", "unchecked_disabled_mirrored"]:
+			add_theme_icon_override(k, blank)
+
+	func _process(delta: float) -> void:
+		var target := 1.0 if button_pressed else 0.0
+		if _knob != target:
+			_knob = move_toward(_knob, target, delta * 8.0) if is_visible_in_tree() else target
+			queue_redraw()
+
+	func _draw() -> void:
+		var sb := get_theme_stylebox("normal")
+		var r := Rect2(Vector2(size.x - SWITCH_SIZE.x - sb.content_margin_right, (size.y - SWITCH_SIZE.y) * 0.5), SWITCH_SIZE)
+		var track := StyleBoxFlat.new()
+		track.set_corner_radius_all(int(SWITCH_SIZE.y * 0.5))
+		track.anti_aliasing = true
+		track.bg_color = Color(1, 1, 1, 0.14).lerp(Color("#f59e0b"), _knob)
+		track.border_color = Color(1, 1, 1, 0.22).lerp(Color("#fbbf24"), _knob)
+		track.set_border_width_all(1)
+		draw_style_box(track, r)
+		var pad := (SWITCH_SIZE.y - KNOB_SIZE) * 0.5
+		var x := lerpf(r.position.x + pad + KNOB_SIZE * 0.5, r.end.x - pad - KNOB_SIZE * 0.5, _knob)
+		var y := r.position.y + SWITCH_SIZE.y * 0.5
+		draw_circle(Vector2(x, y + 1.0), KNOB_SIZE * 0.5, Color(0, 0, 0, 0.35))
+		draw_circle(Vector2(x, y), KNOB_SIZE * 0.5, Color("#f8fafc") if _knob > 0.5 else Color("#cbd5e1"))
+
+
+# Slider with a drawn knob (the default grabber icon is a small bitmap that blurs when the menu is enlarged).
+class MenuSlider:
+	extends HSlider
+
+	func _init() -> void:
+		var blank := ImageTexture.create_from_image(Image.create_empty(int(KNOB_SIZE), int(KNOB_SIZE), false, Image.FORMAT_RGBA8))
+		for k in ["grabber", "grabber_highlight", "grabber_disabled"]:
+			add_theme_icon_override(k, blank)
+		value_changed.connect(func(_v: float): queue_redraw())
+		focus_entered.connect(queue_redraw)
+		focus_exited.connect(queue_redraw)
+
+	func _draw() -> void:
+		var ratio := 0.0 if max_value <= min_value else (value - min_value) / (max_value - min_value)
+		var p := Vector2(KNOB_SIZE * 0.5 + ratio * (size.x - KNOB_SIZE), size.y * 0.5)
+		if has_focus():
+			draw_circle(p, KNOB_SIZE * 0.5 + 5.0, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.3))
+		draw_circle(p + Vector2(0, 1), KNOB_SIZE * 0.5, Color(0, 0, 0, 0.35))
+		draw_circle(p, KNOB_SIZE * 0.5, Color("#fbbf24"))
+		draw_circle(p, KNOB_SIZE * 0.2, Color("#78350f"))
+
+
+func _collect_menu_fonts() -> void:
+	for control: Control in _menu.find_children("*", "Control", true, false):
+		if control.has_theme_font_override("font"):
+			_menu_original_fonts[control] = control.get_theme_font("font")
+
+
 func _prepare_web_menu_font() -> void:
 	# Web SystemFont uses the engine fallback; copy its vector data, not the shared VR font, and render it as
 	# MSDF so the WEB_MENU_SCALE-enlarged menu stays sharp.
 	_web_menu_font = ThemeDB.fallback_font.duplicate() as FontFile
 	assert(_web_menu_font != null, "The engine fallback must be a vector FontFile")
 	_web_menu_font.multichannel_signed_distance_field = true
-	for control: Control in _menu.find_children("*", "Control", true, false):
-		if control.has_theme_font_override("font"):
-			_menu_original_fonts[control] = control.get_theme_font("font")
+	for control: Control in _menu_original_fonts: # release any previously applied scaled fonts first
+		control.add_theme_font_override("font", _menu_original_fonts[control])
+	_scaled_fonts.clear()
 	_fit_menu()
 
 
-# Web build only: enlarges the menu in the browser window (clamped to fit) and keeps it 1:1 on the VR panel.
+# MSDF counterpart of a menu font, used while the menu is enlarged with Control.scale (which would blur bitmap glyphs).
+# On the web every weight maps to the (semibold) engine fallback font; embolden would add artifacts to MSDF glyphs.
+func _scaled_font(f: Font) -> Font:
+	if _scaled_fonts.has(f):
+		return _scaled_fonts[f]
+	var out: Font
+	if f is FontVariation:
+		var v := (f as FontVariation).duplicate() as FontVariation
+		v.base_font = _scaled_font(v.base_font)
+		out = v
+	elif _web_menu_font != null:
+		out = _web_menu_font
+	else:
+		var d := f.duplicate() as Font
+		d.set("multichannel_signed_distance_field", true)
+		out = d
+	_scaled_fonts[f] = out
+	return out
+
+
+# Enlarges the menu on a flat screen (clamped to fit, MSDF fonts) and keeps it 1:1 on the VR panel; also swaps
+# the platform-specific parts of the menu when the UI moves between the screen and the VR panel.
 func _fit_menu() -> void:
-	if _menu == null or _web_menu_font == null:
+	if _menu == null:
 		return
 	var in_vr := get_viewport() is SubViewport
+	if _controls_flat != null:
+		_controls_flat.visible = not in_vr
+		_controls_vr.visible = in_vr
+		_opt_fullscreen.visible = not in_vr
+		_opt_tip.visible = not in_vr
+	if _menu_dim != null:
+		_menu_dim.visible = _menu.visible and not in_vr
+	var scaled := not in_vr and not _menu_original_fonts.is_empty()
 	var s := 1.0
-	if not in_vr:
-		s = WEB_MENU_SCALE
+	if scaled:
+		s = WEB_MENU_SCALE if _web_menu_font != null else DESKTOP_MENU_SCALE
 		var vs := get_viewport().get_visible_rect().size
 		if _menu.size.x > 0.0 and _menu.size.y > 0.0:
-			s = minf(s, minf(vs.x * 0.95 / _menu.size.x, vs.y * 0.95 / _menu.size.y))
+			s = minf(s, minf(vs.x * 0.95 / _menu.size.x, vs.y * 0.92 / _menu.size.y))
 	_menu.pivot_offset = _menu.size * 0.5
 	_menu.scale = Vector2.ONE * s
 	for control: Control in _menu_original_fonts:
-		var font: Font = _menu_original_fonts[control] if in_vr else _web_menu_font
+		var original: Font = _menu_original_fonts[control]
+		var font: Font = _scaled_font(original) if scaled else original
 		if control.get_theme_font("font") != font:
 			control.add_theme_font_override("font", font)
+
+
+# Re-centres the panel on its new minimum size after a view switch (a Control never shrinks on its own).
+func _recenter_menu() -> void:
+	_menu.offset_left = 0
+	_menu.offset_right = 0
+	_menu.offset_top = 0
+	_menu.offset_bottom = 0
+
+
+func _spaced_font(base: Font, spacing: int) -> FontVariation:
+	var v := FontVariation.new()
+	v.base_font = base
+	v.spacing_glyph = spacing
+	return v
 
 
 func _menu_button(text: String, primary: bool = false) -> Button:
 	var b := Button.new()
 	b.text = text.to_upper()
-	b.add_theme_font_override("font", _font_bold)
-	b.add_theme_font_size_override("font_size", 18)
+	b.add_theme_font_override("font", _font_button)
+	b.add_theme_font_size_override("font_size", 17)
+	b.custom_minimum_size.y = 46
 	b.focus_mode = Control.FOCUS_ALL
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
+	var pressed: StyleBoxFlat
 	if primary:
-		normal = _style(Color("#e8920a"), Color("#fbbf24"), 1, 8, 16, 11, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.35), 8)
-		hover = _style(Color("#f0a020"), Color("#fbbf24"), 1, 8, 16, 11, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.5), 10)
-		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_disabled_color"]:
-			b.add_theme_color_override(k, Color("#0f172a"))
+		normal = _style(Color("#e8920a"), GOLD, 1, 8, 18, 10, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.3), 10)
+		hover = _style(Color("#f6a623"), Color("#fde68a"), 1, 8, 18, 10, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.55), 16)
+		pressed = _style(Color("#c97a06"), GOLD, 1, 8, 18, 10)
+		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color",
+				"font_disabled_color"]:
+			b.add_theme_color_override(k, Color("#1c1208"))
 	else:
-		normal = _style(Color(30 / 255.0, 41 / 255.0, 59 / 255.0, 0.7), Color(1, 170 / 255.0, 0, 0.25), 1, 8, 16, 11)
-		hover = _style(Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.22), AMBER, 1, 8, 16, 11, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.25), 7)
-		b.add_theme_color_override("font_color", Color("#e2e8f0"))
+		normal = _style(Color(1, 1, 1, 0.045), Color(1, 1, 1, 0.12), 1, 8, 18, 10)
+		hover = _style(Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.16), AMBER, 1, 8, 18, 10, Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.22), 10)
+		hover.border_width_left = 4
+		pressed = _style(Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.28), GOLD, 1, 8, 18, 10)
+		pressed.border_width_left = 4
+		b.add_theme_color_override("font_color", TEXT)
 		b.add_theme_color_override("font_hover_color", Color.WHITE)
-		b.add_theme_color_override("font_focus_color", Color("#fbbf24"))
+		b.add_theme_color_override("font_focus_color", GOLD)
 		b.add_theme_color_override("font_pressed_color", Color.WHITE)
-		b.add_theme_color_override("font_disabled_color", Color(226 / 255.0, 232 / 255.0, 240 / 255.0, 0.4))
+		b.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
+		b.add_theme_color_override("font_disabled_color", Color(226 / 255.0, 232 / 255.0, 240 / 255.0, 0.3))
 	var disabled := normal.duplicate() as StyleBoxFlat
 	disabled.bg_color.a *= 0.4
-	disabled.border_color = Color(1, 1, 1, 0.1)
+	disabled.border_color = Color(1, 1, 1, 0.06)
 	disabled.shadow_size = 0
-	var focus := _style(Color(0, 0, 0, 0), AMBER, 2, 8)
-	focus.expand_margin_left = 2
-	focus.expand_margin_right = 2
-	focus.expand_margin_top = 2
-	focus.expand_margin_bottom = 2
-	focus.shadow_color = Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.8)
-	focus.shadow_size = 8
 	b.add_theme_stylebox_override("normal", normal)
 	b.add_theme_stylebox_override("hover", hover)
-	b.add_theme_stylebox_override("pressed", hover)
+	b.add_theme_stylebox_override("pressed", pressed)
+	b.add_theme_stylebox_override("hover_pressed", pressed)
 	b.add_theme_stylebox_override("disabled", disabled)
-	b.add_theme_stylebox_override("focus", focus)
+	b.add_theme_stylebox_override("focus", _focus_ring(8))
 	return b
 
 
-func _help(text: String) -> Label:
-	var l := _label(text, _font, 15, Color("#cbd5e1"))
+func _focus_ring(radius: int) -> StyleBoxFlat:
+	var focus := _style(Color(0, 0, 0, 0), GOLD, 2, radius)
+	focus.set_expand_margin_all(3)
+	focus.shadow_color = Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.6)
+	focus.shadow_size = 8
+	return focus
+
+
+func _tip(text: String) -> Label:
+	var l := _label(text, _font, 14, MUTED)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return l
@@ -741,55 +935,139 @@ func _help(text: String) -> Label:
 
 func _field_label(text: String, value: String) -> Array:
 	var row := HBoxContainer.new()
-	var l := _label(text, _font_bold, 17, Color("#e2e8f0"))
+	var l := _label(text, _font, 17, TEXT)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var v := _label(value, _font_bold, 17, AMBER)
+	var v := _label(value, _font_bold, 17, GOLD)
 	row.add_child(l)
 	row.add_child(v)
 	return [row, v]
 
 
-func _checkbox(text: String) -> CheckBox:
-	var c := CheckBox.new()
+func _toggle(text: String) -> CheckButton:
+	var c := MenuToggle.new()
 	c.text = text
 	c.add_theme_font_override("font", _font)
-	c.add_theme_font_size_override("font_size", 18)
-	c.add_theme_icon_override("unchecked", preload("res://scenes/menu_unchecked.svg"))
-	c.add_theme_icon_override("checked", preload("res://scenes/menu_checked.svg"))
-	c.add_theme_constant_override("h_separation", 12)
-	c.custom_minimum_size.y = 36
-	c.add_theme_color_override("font_color", Color("#e2e8f0"))
+	c.add_theme_font_size_override("font_size", 17)
+	c.custom_minimum_size = Vector2(300, 44)
+	c.focus_mode = Control.FOCUS_ALL
+	c.add_theme_color_override("font_color", TEXT)
 	c.add_theme_color_override("font_hover_color", Color.WHITE)
-	c.add_theme_color_override("font_focus_color", Color("#fbbf24"))
-	c.add_theme_color_override("font_pressed_color", Color("#e2e8f0"))
-	var focus := _style(Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.15), AMBER, 2, 6)
-	c.add_theme_stylebox_override("focus", focus)
+	c.add_theme_color_override("font_focus_color", GOLD)
+	c.add_theme_color_override("font_pressed_color", TEXT)
+	c.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
+	var normal := _style(Color(1, 1, 1, 0.035), Color(1, 1, 1, 0.07), 1, 8, 14, 6)
+	var hover := _style(Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.12), Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.55), 1, 8, 14, 6)
+	c.add_theme_stylebox_override("normal", normal)
+	c.add_theme_stylebox_override("pressed", normal)
+	c.add_theme_stylebox_override("hover", hover)
+	c.add_theme_stylebox_override("hover_pressed", hover)
+	c.add_theme_stylebox_override("focus", _focus_ring(8))
 	return c
 
 
 func _slider(min_v: float, max_v: float, step: float) -> HSlider:
-	var s := HSlider.new()
+	var s := MenuSlider.new()
 	s.min_value = min_v
 	s.max_value = max_v
 	s.step = step
-	s.custom_minimum_size = Vector2(0, 20)
+	s.custom_minimum_size = Vector2(0, 26)
+	s.focus_mode = Control.FOCUS_ALL
 	s.add_theme_stylebox_override("grabber_area", _style(AMBER, Color(0, 0, 0, 0), 0, 3, 0, 3))
-	s.add_theme_stylebox_override("grabber_area_highlight", _style(Color("#fbbf24"), Color(0, 0, 0, 0), 0, 3, 0, 3))
-	s.add_theme_stylebox_override("slider", _style(Color(1, 1, 1, 0.2), Color(0, 0, 0, 0), 0, 3, 0, 3))
-	s.add_theme_stylebox_override("focus", _style(Color(0, 0, 0, 0), AMBER, 2, 6))
+	s.add_theme_stylebox_override("grabber_area_highlight", _style(GOLD, Color(0, 0, 0, 0), 0, 3, 0, 3))
+	s.add_theme_stylebox_override("slider", _style(Color(1, 1, 1, 0.14), Color(0, 0, 0, 0), 0, 3, 0, 3))
+	s.add_theme_stylebox_override("focus", StyleBoxEmpty.new()) # MenuSlider draws a halo around the knob instead
 	return s
 
 
-func _h3(text: String) -> Label:
-	var l := _label(text.to_upper(), _font_bold, 22, Color("#fbbf24"))
+# Card holding one group of settings; a slider block is laid out like a toggle row.
+func _section(title: String) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	var l := _label(title.to_upper(), _font_section, 13, AMBER)
+	head.add_child(l)
+	var line := ColorRect.new()
+	line.color = Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.25)
+	line.custom_minimum_size = Vector2(0, 1)
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(line)
+	box.add_child(head)
+	return box
+
+
+func _slider_block(field: Array, slider: HSlider) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _style(Color(1, 1, 1, 0.035), Color(1, 1, 1, 0.07), 1, 8, 14, 8))
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	box.add_child(field[0])
+	box.add_child(slider)
+	panel.add_child(box)
+	return panel
+
+
+func _view_header(text: String) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var l := _label(text.to_upper(), _font_heading, 22, GOLD)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	return l
+	box.add_child(l)
+	box.add_child(Ornament.new(220.0))
+	return box
+
+
+func _key_chip(key: String) -> PanelContainer:
+	var chip := PanelContainer.new()
+	var sb := _style(Color(1, 1, 1, 0.08), Color(1, 1, 1, 0.22), 1, 5, 8, 2)
+	sb.border_width_bottom = 3
+	chip.add_theme_stylebox_override("panel", sb)
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := _label(key, _font_bold, 13, Color.WHITE)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	chip.add_child(l)
+	return chip
+
+
+func _controls_list(title: String, rows: Array, key_width: float) -> VBoxContainer:
+	var section := _section(title)
+	for entry: Array in rows:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var key_box := HBoxContainer.new()
+		key_box.custom_minimum_size.x = key_width
+		key_box.alignment = BoxContainer.ALIGNMENT_END
+		key_box.add_child(_key_chip(entry[0]))
+		row.add_child(key_box)
+		var action := _label(entry[1], _font, 15, TEXT)
+		action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(action)
+		section.add_child(row)
+	return section
+
 
 func _build_menu(root: Control) -> void:
+	_font_title = _spaced_font(_font_black, 4)
+	_font_heading = _spaced_font(_font_black, 3)
+	_font_section = _spaced_font(_font_black, 2)
+	_font_button = _spaced_font(_font_bold, 1)
+
+	_menu_dim = ColorRect.new()
+	_menu_dim.color = Color(2 / 255.0, 3 / 255.0, 8 / 255.0, 0.55)
+	_menu_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_menu_dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_menu_dim)
+
 	_menu = PanelContainer.new()
-	_menu.add_theme_stylebox_override("panel", _style(Color(12 / 255.0, 15 / 255.0, 23 / 255.0, 0.97),
-		Color(1, 170 / 255.0, 0, 0.35), 1, 14, 32, 24, Color(0, 0, 0, 0.85), 48))
-	_menu.custom_minimum_size = Vector2(550, 0)
+	var panel_style := _style(Color(9 / 255.0, 11 / 255.0, 18 / 255.0, 0.96), Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.35),
+		1, 14, 36, 26, Color(0, 0, 0, 0.85), 48)
+	panel_style.border_width_top = 3
+	panel_style.border_color = Color(245 / 255.0, 158 / 255.0, 11 / 255.0, 0.45)
+	_menu.add_theme_stylebox_override("panel", panel_style)
+	_menu.custom_minimum_size = Vector2(520, 0)
 	_menu.anchor_left = 0.5
 	_menu.anchor_right = 0.5
 	_menu.anchor_top = 0.5
@@ -801,20 +1079,31 @@ func _build_menu(root: Control) -> void:
 	_menu.resized.connect(_fit_menu)
 	root.add_child(_menu)
 	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 10)
+	outer.add_theme_constant_override("separation", 14)
 	_menu.add_child(outer)
-	var title := _label("⚔️ DUNGEON STOMP ⚔️", _font_bold, 29, AMBER)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(title)
-	var credit := _label("Created by Mark Longo · Copyright © 2001-%d" % Time.get_date_dict_from_system().year,
-		_font, 15, Color("#cbd5e1"))
+
+	var brand := VBoxContainer.new()
+	brand.add_theme_constant_override("separation", 4)
+	var title_row := HBoxContainer.new()
+	title_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	title_row.add_theme_constant_override("separation", 14)
+	var title := _label("DUNGEON STOMP", _font_title, 38, AMBER)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	title.add_theme_constant_override("shadow_offset_y", 3)
+	title_row.add_child(SwordsEmblem.new())
+	title_row.add_child(title)
+	title_row.add_child(SwordsEmblem.new())
+	brand.add_child(title_row)
+	brand.add_child(Ornament.new(340.0))
+	var credit := _label("Created by Mark Longo  ·  © 2001-%d" % Time.get_date_dict_from_system().year, _font, 13, MUTED)
 	credit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(credit)
+	brand.add_child(credit)
+	outer.add_child(brand)
 
 	# Main view
 	var main := VBoxContainer.new()
-	main.add_theme_constant_override("separation", 10)
-	_prompt = _label("Loading dungeon...", _font, 17, Color("#cbd5e1"))
+	main.add_theme_constant_override("separation", 9)
+	_prompt = _label("Loading dungeon...", _font, 16, Color("#cbd5e1"))
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main.add_child(_prompt)
@@ -823,90 +1112,149 @@ func _build_menu(root: Control) -> void:
 	_btn_resume.disabled = true
 	_btn_generator = _menu_button("Dungeon Generator")
 	_btn_options = _menu_button("Options")
-	for b in [_btn_new, _btn_resume, _btn_generator, _btn_options]:
+	_btn_controls = _menu_button("Controls")
+	for b in [_btn_new, _btn_resume, _btn_generator, _btn_options, _btn_controls]:
 		main.add_child(b)
 	if OS.has_feature("web"):
+		# Enters a WebXR session, and becomes "Exit VR" while one is running (a browser tab can't be quit).
 		_btn_webxr = _menu_button("Checking VR support...")
 		_btn_webxr.disabled = true
-		_btn_webxr.pressed.connect(func(): game.enter_webxr())
+		_btn_webxr.pressed.connect(func(): game.toggle_webxr())
 		main.add_child(_btn_webxr)
 	var exit_button := _menu_button("Exit Game")
 	exit_button.pressed.connect(func(): game.quit_game())
-	exit_button.visible = not OS.has_feature("web") # a browser tab can't be quit
+	exit_button.visible = not OS.has_feature("web")
 	main.add_child(exit_button)
-	_status = _label("", _font, 17, Color("#38bdf8"))
+	_status = _label("", _font, 16, Color("#38bdf8"))
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main.add_child(_status)
-	if game != null and game.xr_rig != null:
-		main.add_child(_help("🥽 L-Stick = Move (Click to Sprint)   ·   R-Stick = Turn   ·   Swing Weapon = Melee Attack   ·R-Trigger = Cast Spell / Select   ·   A = Jump   ·   B = Open Door/Chest / Back   ·   X/Y = Weapon   ·   L-Trigger / ☰ Menu = Menu"))
-	else:
-		main.add_child(_help("⌨️ WASD = Move   ·   Mouse = Look   ·   Left Click = Attack / Cast   ·   Shift = Sprint   ·   Space = Jump   ·   E = Open Door/Chest   ·   Q/Z = Weapon   ·   F = Fly   ·   G = Regen Dungeon   ·   H = HUD   ·   Esc = Menu"))
-		main.add_child(_help("🎮 L-Stick = Move (L3 Sprint)   ·   R-Stick = Look (R3 Level)   ·   RT = Attack / Cast   ·   X = Open Door/Chest   ·   A = Jump / Confirm   ·   LB/RB = Weapon   ·   LT = Sprint   ·   Start = Menu"))
-	main.add_child(_help("Find the glowing exit portal to descend — every level is tougher."))
+	main.add_child(_tip("Find the glowing exit portal to descend. Every level is tougher."))
 	outer.add_child(main)
 	_views["main"] = main
 
 	# Generator view
 	var gen := VBoxContainer.new()
-	gen.add_theme_constant_override("separation", 10)
-	gen.add_child(_h3("Dungeon Generator"))
-	var size_row := _field_label("Rooms / Objects:", "225")
-	gen.add_child(size_row[0])
+	gen.add_theme_constant_override("separation", 12)
+	gen.add_child(_view_header("Dungeon Generator"))
+	var layout := _section("Layout")
+	var size_row := _field_label("Rooms / Objects", "225")
 	_gen_size_val = size_row[1]
 	_gen_size = _slider(150, 600, 25)
 	_gen_size.value = 225
 	_gen_size.value_changed.connect(func(v: float): _gen_size_val.text = str(int(v)))
-	gen.add_child(_gen_size)
-	gen.add_child(_field_label("Seed (optional):", "")[0])
+	layout.add_child(_slider_block(size_row, _gen_size))
+	var seed_box := VBoxContainer.new()
+	seed_box.add_theme_constant_override("separation", 6)
+	var seed_row := _field_label("Seed", "optional")
+	(seed_row[1] as Label).add_theme_color_override("font_color", MUTED)
+	seed_box.add_child(seed_row[0])
 	_gen_seed = LineEdit.new()
 	_gen_seed.placeholder_text = "Leave empty for random"
 	_gen_seed.max_length = 32
 	_gen_seed.add_theme_font_override("font", _font)
-	_gen_seed.add_theme_font_size_override("font_size", 18)
-	_gen_seed.add_theme_stylebox_override("normal", _style(Color(15 / 255.0, 23 / 255.0, 42 / 255.0, 0.85), Color(1, 1, 1, 0.2), 1, 6, 12, 9))
-	_gen_seed.add_theme_stylebox_override("focus", _style(Color(0, 0, 0, 0), AMBER, 1, 6))
-	gen.add_child(_gen_seed)
-	_btn_generate = _menu_button("Generate Dungeon", true)
+	_gen_seed.add_theme_font_size_override("font_size", 17)
+	_gen_seed.add_theme_color_override("font_color", TEXT)
+	_gen_seed.add_theme_color_override("font_placeholder_color", Color(148 / 255.0, 163 / 255.0, 184 / 255.0, 0.6))
+	_gen_seed.add_theme_color_override("caret_color", GOLD)
+	_gen_seed.add_theme_stylebox_override("normal", _style(Color(0, 0, 0, 0.35), Color(1, 1, 1, 0.15), 1, 6, 12, 9))
+	_gen_seed.add_theme_stylebox_override("focus", _focus_ring(6))
+	seed_box.add_child(_gen_seed)
+	var seed_panel := PanelContainer.new()
+	seed_panel.add_theme_stylebox_override("panel", _style(Color(1, 1, 1, 0.035), Color(1, 1, 1, 0.07), 1, 8, 14, 10))
+	seed_panel.add_child(seed_box)
+	layout.add_child(seed_panel)
+	gen.add_child(layout)
+	var gen_buttons := HBoxContainer.new()
+	gen_buttons.add_theme_constant_override("separation", 10)
 	_btn_gen_back = _menu_button("Back")
-	gen.add_child(_btn_generate)
-	gen.add_child(_btn_gen_back)
+	_btn_generate = _menu_button("Generate Dungeon", true)
+	_btn_gen_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_btn_generate.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_btn_generate.size_flags_stretch_ratio = 1.6
+	gen_buttons.add_child(_btn_gen_back)
+	gen_buttons.add_child(_btn_generate)
+	gen.add_child(gen_buttons)
 	outer.add_child(gen)
 	_views["generator"] = gen
 
-	# Options view
+	# Options view: two columns of grouped settings
 	var opts := VBoxContainer.new()
-	opts.add_theme_constant_override("separation", 12)
-	opts.add_child(_h3("Options"))
-	_opt_normal = _checkbox("Normal Maps (N)")
-	_opt_music = _checkbox("Music (P / M)")
-	_opt_vibration = _checkbox("Controller Vibration (Rumble)")
-	_opt_invert = _checkbox("Invert Look Y")
-	_opt_hud = _checkbox("Show Player HUD (H)")
-	_opt_god = _checkbox("God Mode (Invincibility)")
-	_opt_fly = _checkbox("Fly Mode")
-	for c in [_opt_normal, _opt_music, _opt_hud, _opt_vibration, _opt_invert, _opt_god, _opt_fly]:
-		opts.add_child(c)
-	var sens_row := _field_label("Controller Sensitivity:", "2.8")
-	opts.add_child(sens_row[0])
+	opts.add_theme_constant_override("separation", 14)
+	opts.add_child(_view_header("Options"))
+	_opt_normal = _toggle("Normal Maps")
+	_opt_hud = _toggle("Player HUD")
+	_opt_fullscreen = _toggle("Fullscreen")
+	_opt_music = _toggle("Music")
+	_opt_vibration = _toggle("Controller Vibration")
+	_opt_invert = _toggle("Invert Look Y")
+	_opt_god = _toggle("God Mode")
+	_opt_fly = _toggle("Fly Mode")
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", 22)
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 14)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var right := left.duplicate() as VBoxContainer
+	var video := _section("Video")
+	for c in [_opt_normal, _opt_hud, _opt_fullscreen]:
+		video.add_child(c)
+	var sound := _section("Audio")
+	sound.add_child(_opt_music)
+	left.add_child(video)
+	left.add_child(sound)
+	var input := _section("Controller")
+	input.add_child(_opt_vibration)
+	input.add_child(_opt_invert)
+	var sens_row := _field_label("Look Sensitivity", "2.8")
 	_opt_sens_val = sens_row[1]
 	_opt_sens = _slider(1.0, 5.0, 0.2)
 	_opt_sens.value = 2.8
-	opts.add_child(_opt_sens)
-	_btn_fullscreen = _menu_button("Toggle Fullscreen")
+	input.add_child(_slider_block(sens_row, _opt_sens))
+	var cheats := _section("Cheats")
+	cheats.add_child(_opt_god)
+	cheats.add_child(_opt_fly)
+	right.add_child(input)
+	right.add_child(cheats)
+	columns.add_child(left)
+	columns.add_child(right)
+	opts.add_child(columns)
+	_opt_tip = _tip("Shortcuts: N normal maps  ·  P / M music  ·  H HUD  ·  F fly")
+	opts.add_child(_opt_tip)
 	_btn_opt_back = _menu_button("Back")
-	opts.add_child(_btn_fullscreen)
 	opts.add_child(_btn_opt_back)
 	outer.add_child(opts)
 	_views["options"] = opts
+
+	# Controls view: keyboard + gamepad on a flat screen, controller bindings on the VR panel (see _fit_menu)
+	var ctrl := VBoxContainer.new()
+	ctrl.add_theme_constant_override("separation", 14)
+	ctrl.add_child(_view_header("Controls"))
+	_controls_flat = HBoxContainer.new()
+	_controls_flat.add_theme_constant_override("separation", 28)
+	_controls_flat.add_child(_controls_list("Keyboard & Mouse", KEYBOARD_CONTROLS, 92))
+	_controls_flat.add_child(_controls_list("Gamepad", GAMEPAD_CONTROLS, 82))
+	ctrl.add_child(_controls_flat)
+	_controls_vr = _controls_list("VR Controllers", VR_CONTROLS, 120)
+	_controls_vr.visible = false
+	ctrl.add_child(_controls_vr)
+	var ctrl_back := _menu_button("Back")
+	ctrl_back.pressed.connect(_on_back)
+	ctrl.add_child(ctrl_back)
+	outer.add_child(ctrl)
+	_views["controls"] = ctrl
 
 	_btn_new.pressed.connect(_on_new_game)
 	_btn_resume.pressed.connect(click_resume)
 	_btn_generator.pressed.connect(_on_open_generator)
 	_btn_options.pressed.connect(_on_open_options)
+	_btn_controls.pressed.connect(func():
+		_click_sound()
+		show_menu_view("controls"))
 	_btn_generate.pressed.connect(_on_generate)
 	_btn_gen_back.pressed.connect(_on_back)
 	_btn_opt_back.pressed.connect(_on_back)
-	_btn_fullscreen.pressed.connect(_on_fullscreen)
+	_opt_fullscreen.toggled.connect(_on_fullscreen)
 	_opt_god.toggled.connect(func(on: bool):
 		if on != game.is_invincible:
 			game.toggle_god_mode())
@@ -998,16 +1346,18 @@ func _on_back() -> void:
 	show_menu_view("main")
 
 
-func _on_fullscreen() -> void:
+func _on_fullscreen(on: bool) -> void:
+	if _syncing:
+		return
 	_click_sound()
-	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fs else DisplayServer.WINDOW_MODE_FULLSCREEN)
-	_update_fullscreen_button()
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED)
 
 
-func _update_fullscreen_button() -> void:
-	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	_btn_fullscreen.text = "EXIT FULLSCREEN" if fs else "TOGGLE FULLSCREEN"
+func _sync_fullscreen_toggle() -> void:
+	var was_syncing := _syncing
+	_syncing = true
+	_opt_fullscreen.button_pressed = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	_syncing = was_syncing
 
 
 func sync_options() -> void:
@@ -1024,21 +1374,25 @@ func sync_options() -> void:
 	_syncing = false
 	set_toggle_info("music", game.audio.is_music_on())
 	set_toggle_info("normalmap", game.normal_maps_enabled)
-	_update_fullscreen_button()
+	_sync_fullscreen_toggle()
 
 
 func show_menu_view(view: String) -> void:
+	if not _views.has(view):
+		return
 	_current_view = view
 	for k in _views:
 		(_views[k] as Control).visible = k == view
 	if _status != null:
-		_status.text = ""
+		set_status("")
 	if view == "options":
-		_update_fullscreen_button()
+		_sync_fullscreen_toggle()
+	_recenter_menu.call_deferred()
 
 
 func show_menu(show: bool) -> void:
 	_menu.visible = show
+	_menu_dim.visible = show and not get_viewport() is SubViewport
 	if not show:
 		var f := get_viewport().gui_get_focus_owner()
 		if f != null:
@@ -1063,6 +1417,8 @@ func set_webxr_state(text: String, enabled: bool, show: bool = true) -> void:
 
 func set_status(text: String) -> void:
 	_status.text = text
+	_status.visible = text != ""
+	_recenter_menu.call_deferred()
 
 
 func set_resume_enabled(enabled: bool) -> void:
@@ -1082,18 +1438,25 @@ func on_back_or_resume() -> void:
 
 
 func _focusables() -> Array:
-	var view: Control = _views[_current_view]
 	var out: Array = []
-	var stack: Array = [view]
-	while not stack.is_empty():
-		var n: Node = stack.pop_front()
-		for c in n.get_children():
-			if c is BaseButton or c is Slider or c is LineEdit:
-				if (c as Control).visible and not (c is BaseButton and (c as BaseButton).disabled):
-					out.append(c)
-			elif c is Container:
-				stack.append(c)
+	_collect_focusables(_views[_current_view], out)
 	return out
+
+
+# Depth-first, so the options view's columns are walked top to bottom one after the other.
+func _collect_focusables(n: Node, out: Array) -> void:
+	for c in n.get_children():
+		if not (c is Control and (c as Control).visible):
+			continue
+		if c is BaseButton or c is Slider or c is LineEdit:
+			if not (c is BaseButton and (c as BaseButton).disabled):
+				out.append(c)
+		elif c is Container:
+			_collect_focusables(c, out)
+
+
+func _is_toggle(c: Control) -> bool:
+	return c is Button and (c as Button).toggle_mode
 
 
 func gamepad_move_focus(dir: int) -> void:
@@ -1113,8 +1476,8 @@ func gamepad_adjust(dir: int) -> void:
 		var s := cur as Slider
 		s.value = clampf(s.value + dir * s.step, s.min_value, s.max_value)
 		game.audio.play_sound("buttonselect111.wav", 0.25)
-	elif cur is CheckBox:
-		(cur as CheckBox).button_pressed = not (cur as CheckBox).button_pressed
+	elif cur != null and _is_toggle(cur):
+		(cur as Button).button_pressed = not (cur as Button).button_pressed
 		game.audio.play_sound("buttonselect111.wav", 0.35)
 
 
@@ -1123,8 +1486,8 @@ func gamepad_accept() -> void:
 	if cur == null:
 		gamepad_move_focus(0)
 		return
-	if cur is CheckBox:
-		(cur as CheckBox).button_pressed = not (cur as CheckBox).button_pressed
+	if _is_toggle(cur):
+		(cur as Button).button_pressed = not (cur as Button).button_pressed
 		game.audio.play_sound("buttonselect111.wav", 0.4)
 	elif cur is BaseButton:
 		(cur as BaseButton).pressed.emit()

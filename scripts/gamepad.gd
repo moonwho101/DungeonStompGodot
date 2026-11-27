@@ -57,13 +57,13 @@ static func format_name(raw: String) -> String:
 func _on_joy_changed(device: int, connected: bool) -> void:
 	if connected:
 		_device = device
-		game.ui.toast("🎮 %s Connected" % format_name(Input.get_joy_name(device)))
+		game.ui.toast("%s Connected" % format_name(Input.get_joy_name(device)))
 		vibrate(80, 0.4, 0.2)
 	else:
 		if device == _device:
 			var pads := Input.get_connected_joypads()
 			_device = pads[0] if not pads.is_empty() else -1
-		game.ui.toast("🎮 Controller Disconnected")
+		game.ui.toast("Controller Disconnected")
 		_prev.clear()
 	_update_display()
 
@@ -125,7 +125,7 @@ func _detect_active_device() -> void:
 		if active:
 			_device = d
 			_prev.clear()
-			game.ui.toast("🎮 %s Active" % format_name(Input.get_joy_name(d)))
+			game.ui.toast("%s Active" % format_name(Input.get_joy_name(d)))
 			_update_display()
 			return
 

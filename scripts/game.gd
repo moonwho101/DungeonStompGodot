@@ -156,6 +156,7 @@ var _debug_pos := Vector3.ZERO
 var _has_debug_pos := false
 var _debug_rot := Vector2.ZERO
 var _debug_calm := false
+var _debug_menu := "" # --menu=<view>: open this menu view once loaded (screenshot checks)
 
 
 func _ready() -> void:
@@ -187,6 +188,8 @@ func _parse_cmdline() -> void:
 				_debug_rot = Vector2(deg_to_rad(r[0]), deg_to_rad(r[1]))
 		elif arg == "--calm":
 			_debug_calm = true
+		elif arg.begins_with("--menu="):
+			_debug_menu = arg.substr(7)
 
 
 func _setup_scene() -> void:
@@ -280,6 +283,13 @@ func _webxr_supported(mode: String, supported: bool) -> void:
 		ui.set_webxr_state("Enter VR" if supported else "VR not supported by this browser", supported)
 
 
+func toggle_webxr() -> void:
+	if xr_rig != null:
+		exit_webxr()
+	else:
+		enter_webxr()
+
+
 func enter_webxr() -> void:
 	if webxr == null:
 		return
@@ -289,6 +299,18 @@ func enter_webxr() -> void:
 	ui.set_webxr_state("Starting VR...", false)
 	if not webxr.initialize():
 		_webxr_failed("Could not request an immersive VR session.")
+
+
+# Menu "Exit VR": ends the immersive session and returns to the browser page.
+func exit_webxr() -> void:
+	if webxr == null or xr_rig == null:
+		return
+	if game_started:
+		save_current_run()
+	ui.set_webxr_state("Exiting VR...", false)
+	webxr.uninitialize()
+	if xr_rig != null: # uninitialize() may end the session without emitting session_ended
+		_webxr_ended()
 
 
 func _webxr_started() -> void:
@@ -301,7 +323,7 @@ func _webxr_started() -> void:
 	camera.current = false
 	ui.move_to_viewport(xr_rig.ui_viewport)
 	xr_rig.attach_hud_overlays(ui)
-	ui.set_webxr_state("Enter VR", true, false)
+	ui.set_webxr_state("Exit VR", true)
 	update_weapon_mesh()
 	print("WebXR session started: ", webxr.reference_space_type)
 
@@ -420,6 +442,10 @@ func _init_game() -> void:
 	update_weapon_mesh()
 	world_ready = true
 	ui.show_loading(false)
+	if _debug_menu != "":
+		ui.show_menu_view(_debug_menu)
+		if _debug_menu == "options":
+			ui.sync_options()
 
 	var sounds: Array = SWISH_SOUNDS + IMPACT_SOUNDS + PLAYER_IMPACT_SOUNDS + DOOR_OPEN_SOUNDS + ["spell1.wav", "spell2.wav", "spell3.wav",
 		"fireball.wav", "explod1.wav", "explod2.wav", "walk.wav", "die.wav", "death1.wav", "death2.wav", "death3.wav", "death4.wav"]
