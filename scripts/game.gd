@@ -1616,8 +1616,8 @@ func add_player_xp(amount: float) -> void:
 	while player_stats.xp >= player_stats.nextXp:
 		player_stats.xp -= player_stats.nextXp
 		player_stats.level += 1
-		player_stats.nextXp = floori(player_stats.nextXp * 1.5)
-		player_stats.maxHealth += 20
+		player_stats.nextXp = floori(player_stats.nextXp * 1.35)
+		player_stats.maxHealth += 10
 		player_stats.health = float(player_stats.maxHealth)
 		leveled = true
 	update_player_hud()
