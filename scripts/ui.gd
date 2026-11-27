@@ -879,9 +879,6 @@ func _build_menu(root: Control) -> void:
 	opts.add_child(_h3("Options"))
 	_opt_normal = _checkbox("Normal Maps (N)")
 	_opt_music = _checkbox("Music (P / M)")
-	if OS.has_feature("web"):
-		_opt_music.text = "Music unavailable in web build"
-		_opt_music.disabled = true
 	_opt_vibration = _checkbox("Controller Vibration (Rumble)")
 	_opt_invert = _checkbox("Invert Look Y")
 	_opt_hud = _checkbox("Show Player HUD (H)")

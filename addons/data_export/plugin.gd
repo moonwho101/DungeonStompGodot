@@ -59,12 +59,13 @@ class DataExportPlugin extends EditorExportPlugin:
 	const SKIP_EXTENSIONS := ["gdignore", "max", "import", "uid"]
 	# Source art for res://icons/ (see tools/generate_icons.py); the game never loads it.
 	const SKIP_FILES := ["res://Assets/icon.png"]
-	# The web build has no music (Midi is skipped) and only packs the file types the game reads, to keep
-	# the browser download small.
+	# The web build only packs the file types the game reads, to keep the browser download small
+	# (and the .pck under GitHub's 100 MB per-file limit).
 	const WEB_FOLDERS := {
 		"Assets": ["jpg", "png", "md2", "3ds"],
 		"bin": ["dat", "map", "mod", "cmp", "snd", "txt"],
 		"Sounds": ["wav"],
+		"Midi": ["mp3"],
 	}
 
 	func _get_name() -> String:

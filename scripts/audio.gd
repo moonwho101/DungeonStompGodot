@@ -5,12 +5,12 @@ extends Node
 const MAX_CONCURRENT_SOUNDS := 24
 const WORLD_VOICES := 12
 const HEARING_RANGE := 1200.0
-const MUSIC_TRACKS := ["Midi/d1.wav", "Midi/d2.wav", "Midi/d3.wav", "Midi/d4.wav"]
+const MUSIC_TRACKS := ["Midi/d1.mp3", "Midi/d2.mp3", "Midi/d3.mp3", "Midi/d4.mp3"]
 
 var _streams: Dictionary = {} # rel path -> AudioStream or null
 var _players: Array = []
 var _world_players: Array[AudioStreamPlayer3D] = []
-var music_enabled := not OS.has_feature("web") # the web export does not pack Midi/ (download size)
+var music_enabled := true
 var _music_player: AudioStreamPlayer
 var _music_playing := false
 var _music_delay := 0.0
@@ -43,7 +43,13 @@ func _load_stream(rel: String) -> AudioStream:
 	var stream: AudioStream = null
 	var abs_path := DataPaths.path(rel)
 	if FileAccess.file_exists(abs_path):
-		stream = load_wav(FileAccess.get_file_as_bytes(abs_path))
+		var bytes := FileAccess.get_file_as_bytes(abs_path)
+		if rel.get_extension().to_lower() == "mp3":
+			var mp3 := AudioStreamMP3.new()
+			mp3.data = bytes
+			stream = mp3
+		else:
+			stream = load_wav(bytes)
 	_streams[rel] = stream
 	return stream
 
@@ -248,8 +254,6 @@ func stop_music() -> void:
 
 
 func toggle_music() -> bool:
-	if OS.has_feature("web"):
-		return false
 	music_enabled = not music_enabled
 	if not music_enabled:
 		stop_music()
