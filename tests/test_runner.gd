@@ -98,6 +98,11 @@ func _run_tests() -> void:
 		var slide := AudioManager.load_wav(FileAccess.get_file_as_bytes(DataPaths.path("Sounds/" + file)))
 		check(slide != null and slide.get_length() > 0 and slide.loop_mode == AudioStreamWAV.LOOP_DISABLED,
 			"door slide decodes for one-shot playback: " + file)
+	var audio := AudioManager.new()
+	for track: String in AudioManager.MUSIC_TRACKS:
+		var music := audio._load_stream(track)
+		check(music is AudioStreamMP3 and music.get_length() > 60.0, "music track loads as MP3: " + track)
+	audio.free()
 
 	_xr_tests(models)
 	await _webxr_ui_transition_test()
